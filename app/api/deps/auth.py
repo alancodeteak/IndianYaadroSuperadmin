@@ -1,25 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any, Optional
 
 from fastapi import Depends, Header
-from sqlalchemy.orm import Session
 from starlette import status
 
+from app.api.core.security import decode_token
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
-from app.api.core.config import Settings, get_settings
-from app.api.core.security import decode_token
+from app.api.deps.session import get_session_service
 from app.domain.enums.roles import Role
-from app.infrastructure.db.session import get_db_session
-from app.infrastructure.otp_notifier import SMTPOTPNotifier
-from app.repositories.order_repository import OrderRepository
-from app.services.auth_service import AuthService
-from app.services.otp_service import InMemoryOTPStore, OTPNotifier
-from app.services.order_service import OrderService
-from app.services.session_service import SessionService
 
 
 @dataclass(frozen=True)
@@ -71,7 +62,6 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
-    # role_raw can be "SUPERADMIN" or list of roles; normalize.
     if isinstance(role_raw, list):
         role_candidate = role_raw[0] if role_raw else None
     else:
@@ -91,10 +81,6 @@ async def get_current_user(
 
 
 def require_roles(*allowed_roles: Role):
-    """
-    Dependency helper for role-based authorization.
-    """
-
     async def _checker(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if current_user.role not in allowed_roles:
             raise ApiError(
@@ -109,43 +95,5 @@ def require_roles(*allowed_roles: Role):
 
 
 async def require_authenticated(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """
-    Explicit dependency alias for routes that need authentication
-    without role-specific authorization.
-    """
-
     return current_user
-
-
-def get_order_repository(db: Session = Depends(get_db_session)) -> OrderRepository:
-    return OrderRepository(db=db)
-
-
-def get_order_service(repo: OrderRepository = Depends(get_order_repository)) -> OrderService:
-    return OrderService(repository=repo)
-
-
-@lru_cache
-def get_session_service() -> SessionService:
-    return SessionService()
-
-
-@lru_cache
-def get_otp_store() -> InMemoryOTPStore:
-    return InMemoryOTPStore()
-
-
-@lru_cache
-def get_otp_notifier() -> OTPNotifier:
-    settings: Settings = get_settings()
-    return SMTPOTPNotifier(settings=settings)
-
-
-def get_auth_service() -> AuthService:
-    return AuthService(
-        settings=get_settings(),
-        otp_store=get_otp_store(),
-        otp_notifier=get_otp_notifier(),
-        session_service=get_session_service(),
-    )
 

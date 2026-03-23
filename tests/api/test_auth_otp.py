@@ -75,3 +75,24 @@ def test_portal_otp_login_success():
     assert verify_resp.json()["data"]["role"] == "PORTAL_USER"
     app.dependency_overrides.clear()
 
+
+def test_scoped_login_endpoints_work_for_admin():
+    service, notifier = _build_auth_service("admin@test.com", "portal@test.com")
+    app.dependency_overrides[get_auth_service] = lambda: service
+    client = TestClient(app)
+
+    send_resp = client.post(
+        "/login/send-otp",
+        json={"scope": "admin", "email": "admin@test.com"},
+    )
+    assert send_resp.status_code == 200
+    assert send_resp.json()["data"]["code"] == "OTP_SENT"
+
+    verify_resp = client.post(
+        "/login/verify-otp",
+        json={"scope": "admin", "email": "admin@test.com", "otp_code": notifier.last_otp},
+    )
+    assert verify_resp.status_code == 200
+    assert verify_resp.json()["data"]["role"] == "SUPERADMIN"
+    app.dependency_overrides.clear()
+

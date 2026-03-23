@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from secrets import randbelow
+from typing import Literal
 
 from starlette import status
 
@@ -52,6 +53,10 @@ class AuthService:
     def send_portal_otp(self, email: str) -> None:
         self._send_otp(purpose="portal", role=Role.PORTAL_USER, email=email)
 
+    def send_otp(self, scope: Literal["admin", "portal"], email: str) -> None:
+        purpose, role = _scope_to_context(scope)
+        self._send_otp(purpose=purpose, role=role, email=email)
+
     def verify_admin_otp(self, email: str, otp_code: str) -> AuthSession:
         return self._verify_otp(purpose="admin", role=Role.SUPERADMIN, email=email, otp_code=otp_code)
 
@@ -59,6 +64,10 @@ class AuthService:
         return self._verify_otp(
             purpose="portal", role=Role.PORTAL_USER, email=email, otp_code=otp_code
         )
+
+    def verify_otp(self, scope: Literal["admin", "portal"], email: str, otp_code: str) -> AuthSession:
+        purpose, role = _scope_to_context(scope)
+        return self._verify_otp(purpose=purpose, role=role, email=email, otp_code=otp_code)
 
     def logout(self, access_token: str) -> None:
         payload = decode_token(access_token)
@@ -186,4 +195,16 @@ def _mask_email(email: str) -> str:
     else:
         local = local[:1] + ("*" * (len(local) - 2)) + local[-1:]
     return f"{local}@{domain}"
+
+
+def _scope_to_context(scope: str) -> tuple[str, Role]:
+    if scope == "admin":
+        return "admin", Role.SUPERADMIN
+    if scope == "portal":
+        return "portal", Role.PORTAL_USER
+    raise ApiError(
+        code=ErrorCode.VALIDATION_ERROR,
+        message="scope must be one of: admin, portal",
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )
 

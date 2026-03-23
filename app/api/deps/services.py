@@ -1,0 +1,23 @@
+from fastapi import Depends
+
+from app.api.core.config import get_settings
+from app.api.deps.otp import get_otp_notifier, get_otp_store
+from app.api.deps.repositories import get_order_repository
+from app.api.deps.session import get_session_service
+from app.repositories.order_repository import OrderRepository
+from app.services.auth_service import AuthService
+from app.services.order_service import OrderService
+
+
+def get_order_service(repo: OrderRepository = Depends(get_order_repository)) -> OrderService:
+    return OrderService(repository=repo)
+
+
+def get_auth_service() -> AuthService:
+    return AuthService(
+        settings=get_settings(),
+        otp_store=get_otp_store(),
+        otp_notifier=get_otp_notifier(),
+        session_service=get_session_service(),
+    )
+

@@ -3,6 +3,17 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class ScopedSendOTPRequest(BaseModel):
+    scope: str
+    email: str
+
+
+class ScopedVerifyOTPRequest(BaseModel):
+    scope: str
+    email: str
+    otp_code: str
+
+
 class SendOTPRequest(BaseModel):
     email: str
 
