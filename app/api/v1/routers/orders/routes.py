@@ -48,4 +48,3 @@ async def patch_order(
 ):
     updated = service.update_order(order_id, payload)
     return {"data": OrderRead.model_validate(updated).model_dump(), "meta": None}
-

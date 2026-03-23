@@ -10,8 +10,10 @@ from app.api.v1.routers.monitorapp import router as monitorapp_router
 from app.api.v1.routers.orders import router as orders_router
 from app.api.v1.routers.report import router as report_router
 from app.api.v1.routers.search import router as search_router
-from app.api.v1.routers.supermarkets import router as supermarkets_router
-from app.api.v1.routers.supermarkets_add import router as supermarkets_add_router
+from app.api.v1.routers.supermarkets_group import (
+    supermarkets_add_router,
+    supermarkets_router,
+)
 
 
 def get_protected_router() -> APIRouter:

@@ -2,25 +2,23 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header
 
-from app.api.deps import get_auth_service, require_authenticated
+from app.api.deps import get_auth_service
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.api.v1.schemas.auth import OTPResponse, SendOTPRequest, VerifyOTPRequest
 from app.services.auth_service import AuthService
 
-router = APIRouter(prefix="/portal", tags=["portal"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.get("/")
-async def portal_root(_: object = Depends(require_authenticated)) -> dict:
-    return {"data": {"message": "Portal API router ready"}, "meta": None}
+@router.get("/login")
+async def login_page() -> dict:
+    return {"data": {"message": "Not implemented yet"}, "meta": None}
 
 
 @router.post("/send-otp")
-async def send_portal_otp(
-    payload: SendOTPRequest, service: AuthService = Depends(get_auth_service)
-) -> dict:
-    service.send_portal_otp(email=str(payload.email))
+async def send_otp(payload: SendOTPRequest, service: AuthService = Depends(get_auth_service)) -> dict:
+    service.send_admin_otp(email=str(payload.email))
     return {
         "data": OTPResponse(message="OTP sent successfully", code=ErrorCode.OTP_SENT).model_dump(),
         "meta": None,
@@ -28,10 +26,10 @@ async def send_portal_otp(
 
 
 @router.post("/verify-otp")
-async def verify_portal_otp(
+async def verify_otp(
     payload: VerifyOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
-    session = service.verify_portal_otp(email=str(payload.email), otp_code=payload.otp_code)
+    session = service.verify_admin_otp(email=str(payload.email), otp_code=payload.otp_code)
     return {
         "data": {
             "access_token": session.access_token,
@@ -44,7 +42,7 @@ async def verify_portal_otp(
 
 
 @router.post("/logout")
-async def portal_logout(
+async def logout(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
     service: AuthService = Depends(get_auth_service),
 ) -> dict:
@@ -64,4 +62,3 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
             status_code=401,
         )
     return parts[1]
-
