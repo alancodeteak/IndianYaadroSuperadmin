@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic

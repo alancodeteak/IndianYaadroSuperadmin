@@ -1,0 +1,2 @@
+"""Superadmin FastAPI backend package."""
+
