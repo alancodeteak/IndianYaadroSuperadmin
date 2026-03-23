@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     OTP_MAX_ATTEMPTS: int = 5
     ADMIN_OTP_EMAILS: str = ""
     PORTAL_OTP_EMAILS: str = ""
+    SMTP_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "Yadro Superadmin"
 
     REDIS_URL: str | None = None
     DEFAULT_PAGE_SIZE: int = 20
@@ -73,6 +82,19 @@ class Settings(BaseSettings):
             raise ValueError("OTP_RESEND_COOLDOWN_SECONDS must be >= 0")
         if self.OTP_MAX_ATTEMPTS < 1:
             raise ValueError("OTP_MAX_ATTEMPTS must be >= 1")
+        if self.SMTP_USE_TLS and self.SMTP_USE_SSL:
+            raise ValueError("SMTP_USE_TLS and SMTP_USE_SSL cannot both be true")
+        if self.SMTP_ENABLED:
+            if not self.SMTP_HOST:
+                raise ValueError("SMTP_HOST is required when SMTP_ENABLED is true")
+            if not self.SMTP_PORT:
+                raise ValueError("SMTP_PORT is required when SMTP_ENABLED is true")
+            if not self.SMTP_FROM_EMAIL:
+                raise ValueError("SMTP_FROM_EMAIL is required when SMTP_ENABLED is true")
+            if not self.SMTP_USERNAME:
+                raise ValueError("SMTP_USERNAME is required when SMTP_ENABLED is true")
+            if not self.SMTP_PASSWORD:
+                raise ValueError("SMTP_PASSWORD is required when SMTP_ENABLED is true")
 
         return self
 

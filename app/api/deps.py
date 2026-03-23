@@ -10,14 +10,14 @@ from starlette import status
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
-from app.api.core.config import get_settings
+from app.api.core.config import Settings, get_settings
 from app.api.core.security import decode_token
 from app.domain.enums.roles import Role
 from app.infrastructure.db.session import get_db_session
-from app.infrastructure.otp_notifier import LogOTPNotifier
+from app.infrastructure.otp_notifier import SMTPOTPNotifier
 from app.repositories.order_repository import OrderRepository
 from app.services.auth_service import AuthService
-from app.services.otp_service import InMemoryOTPStore
+from app.services.otp_service import InMemoryOTPStore, OTPNotifier
 from app.services.order_service import OrderService
 from app.services.session_service import SessionService
 
@@ -136,8 +136,9 @@ def get_otp_store() -> InMemoryOTPStore:
 
 
 @lru_cache
-def get_otp_notifier() -> LogOTPNotifier:
-    return LogOTPNotifier()
+def get_otp_notifier() -> OTPNotifier:
+    settings: Settings = get_settings()
+    return SMTPOTPNotifier(settings=settings)
 
 
 def get_auth_service() -> AuthService:
