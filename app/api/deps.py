@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Optional
 
 from fastapi import Depends, Header
@@ -9,11 +10,16 @@ from starlette import status
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
+from app.api.core.config import get_settings
 from app.api.core.security import decode_token
 from app.domain.enums.roles import Role
 from app.infrastructure.db.session import get_db_session
+from app.infrastructure.otp_notifier import LogOTPNotifier
 from app.repositories.order_repository import OrderRepository
+from app.services.auth_service import AuthService
+from app.services.otp_service import InMemoryOTPStore
 from app.services.order_service import OrderService
+from app.services.session_service import SessionService
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,14 @@ async def get_current_user(
     token = _extract_bearer_token(authorization)
 
     payload: dict[str, Any] = decode_token(token)
+    session_service = get_session_service()
+    jti = payload.get("jti")
+    if jti and session_service.is_revoked(str(jti)):
+        raise ApiError(
+            code=ErrorCode.AUTH_SESSION_EXPIRED,
+            message="Session expired",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
     user_id = payload.get("sub") or payload.get("user_id") or payload.get("id")
     role_raw = payload.get("role") or payload.get("roles")
@@ -109,4 +123,28 @@ def get_order_repository(db: Session = Depends(get_db_session)) -> OrderReposito
 
 def get_order_service(repo: OrderRepository = Depends(get_order_repository)) -> OrderService:
     return OrderService(repository=repo)
+
+
+@lru_cache
+def get_session_service() -> SessionService:
+    return SessionService()
+
+
+@lru_cache
+def get_otp_store() -> InMemoryOTPStore:
+    return InMemoryOTPStore()
+
+
+@lru_cache
+def get_otp_notifier() -> LogOTPNotifier:
+    return LogOTPNotifier()
+
+
+def get_auth_service() -> AuthService:
+    return AuthService(
+        settings=get_settings(),
+        otp_store=get_otp_store(),
+        otp_notifier=get_otp_notifier(),
+        session_service=get_session_service(),
+    )
 

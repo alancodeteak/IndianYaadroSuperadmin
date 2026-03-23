@@ -8,7 +8,6 @@ from app.api.v1.routers.delivery_partners import router as delivery_partners_rou
 from app.api.v1.routers.invoices import router as invoices_router
 from app.api.v1.routers.monitorapp import router as monitorapp_router
 from app.api.v1.routers.orders import router as orders_router
-from app.api.v1.routers.portal import router as portal_router
 from app.api.v1.routers.report import router as report_router
 from app.api.v1.routers.search import router as search_router
 from app.api.v1.routers.supermarkets import router as supermarkets_router
@@ -19,7 +18,6 @@ def get_protected_router() -> APIRouter:
     router = APIRouter()
     protected_dep = [Depends(require_authenticated)]
 
-    router.include_router(portal_router, dependencies=protected_dep)
     router.include_router(dashboard_router, dependencies=protected_dep)
     router.include_router(search_router, dependencies=protected_dep)
     router.include_router(report_router, dependencies=protected_dep)

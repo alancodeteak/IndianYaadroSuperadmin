@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_ISSUER: str = "yaadro-superadmin"
     JWT_AUDIENCE: str = "yaadro-superadmin-clients"
+    OTP_TTL_SECONDS: int = 300
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_ATTEMPTS: int = 5
+    ADMIN_OTP_EMAILS: str = ""
+    PORTAL_OTP_EMAILS: str = ""
 
     REDIS_URL: str | None = None
     DEFAULT_PAGE_SIZE: int = 20
@@ -62,6 +67,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "METRICS_API_KEY is required when ENABLE_METRICS_API_KEY_PROTECTION is true"
             )
+        if self.OTP_TTL_SECONDS <= 0:
+            raise ValueError("OTP_TTL_SECONDS must be > 0")
+        if self.OTP_RESEND_COOLDOWN_SECONDS < 0:
+            raise ValueError("OTP_RESEND_COOLDOWN_SECONDS must be >= 0")
+        if self.OTP_MAX_ATTEMPTS < 1:
+            raise ValueError("OTP_MAX_ATTEMPTS must be >= 1")
 
         return self
 
