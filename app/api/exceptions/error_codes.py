@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+
+class ErrorCode:
+    """
+    Centralized API error codes for stable client extraction/handling.
+    """
+
+    # Generic
+    INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
+    REQUEST_VALIDATION_ERROR = "REQUEST_VALIDATION_ERROR"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+
+    # Authn/Authz
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+    UNAUTHORIZED = "UNAUTHORIZED"
+    INVALID_ADMIN_API_KEY = "INVALID_ADMIN_API_KEY"
+    INVALID_METRICS_API_KEY = "INVALID_METRICS_API_KEY"
+    API_KEY_NOT_CONFIGURED = "API_KEY_NOT_CONFIGURED"
+
+    # Orders
+    ORDER_NOT_FOUND = "ORDER_NOT_FOUND"
+
+    # Middleware
+    RATE_LIMITED = "RATE_LIMITED"
+
+    @staticmethod
+    def http_status_code(status_code: int) -> str:
+        return f"HTTP_{status_code}"
+

@@ -1,14 +1,11 @@
 from fastapi import APIRouter
 
-from app.api.v1.routers.health import router as health_router
+from app.api.v1.routers import get_protected_router, get_public_router
 
 
 def get_api_router() -> APIRouter:
     router = APIRouter()
-
-    router.include_router(health_router)
-
-    # Future: include routers per feature:
-    # router.include_router(auth_router, prefix="/auth", tags=["auth"])
+    router.include_router(get_public_router())
+    router.include_router(get_protected_router())
     return router
 
