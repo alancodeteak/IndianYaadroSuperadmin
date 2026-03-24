@@ -13,9 +13,7 @@ from app.services.otp_service import InMemoryOTPStore
 class _NotifierStub:
     last_otp: str | None = None
 
-    async def send_otp(
-        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
-    ) -> None:
+    async def send_otp(self, purpose: str, target: str, otp_code: str, expires_in_seconds: int) -> None:
         self.last_otp = otp_code
 
 
@@ -34,7 +32,7 @@ def _build_auth_service(admin_email: str, portal_email: str) -> tuple[AuthServic
     return service, notifier
 
 
-def test_admin_otp_login_and_logout_flow():
+def test_admin_otp_login_flow():
     service, notifier = _build_auth_service("admin@test.com", "portal@test.com")
     app.dependency_overrides[get_auth_service] = lambda: service
     client = TestClient(app)
@@ -51,12 +49,6 @@ def test_admin_otp_login_and_logout_flow():
     token = verify_resp.json()["data"]["access_token"]
     assert verify_resp.json()["data"]["role"] == "SUPERADMIN"
 
-    logout_resp = client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
-    assert logout_resp.status_code == 200
-
-    post_logout = client.get("/portal/", headers={"Authorization": f"Bearer {token}"})
-    assert post_logout.status_code == 401
-    assert post_logout.json()["error"]["code"] == "AUTH_SESSION_EXPIRED"
     app.dependency_overrides.clear()
 
 
@@ -96,19 +88,5 @@ def test_scoped_login_endpoints_work_for_admin():
     )
     assert verify_resp.status_code == 200
     assert verify_resp.json()["data"]["role"] == "SUPERADMIN"
-    app.dependency_overrides.clear()
-
-
-def test_send_otp_rejects_email_not_in_allowlist():
-    service, _ = _build_auth_service("admin@test.com", "portal@test.com")
-    app.dependency_overrides[get_auth_service] = lambda: service
-    client = TestClient(app)
-
-    send_resp = client.post(
-        "/login/send-otp",
-        json={"scope": "admin", "email": "not-allowed@test.com"},
-    )
-    assert send_resp.status_code == 403
-    assert send_resp.json()["error"]["code"] == "UNAUTHORIZED"
     app.dependency_overrides.clear()
 

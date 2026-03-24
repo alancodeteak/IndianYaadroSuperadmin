@@ -1,19 +1,11 @@
-from typing import Optional
+from fastapi import APIRouter, Depends
 
-from fastapi import APIRouter, Depends, Header
-
-from app.api.deps import get_auth_service, require_authenticated
+from app.api.deps import get_auth_service
 from app.api.exceptions.error_codes import ErrorCode
-from app.api.exceptions.http_errors import ApiError
 from app.api.v1.schemas.auth import OTPResponse, SendOTPRequest, VerifyOTPRequest
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/portal", tags=["portal"])
-
-
-@router.get("/")
-async def portal_root(_: object = Depends(require_authenticated)) -> dict:
-    return {"data": {"message": "Portal API router ready"}, "meta": None}
 
 
 @router.post("/send-otp")
@@ -43,24 +35,3 @@ async def verify_portal_otp(
     }
 
 
-@router.post("/logout")
-async def portal_logout(
-    authorization: Optional[str] = Header(default=None, alias="Authorization"),
-    service: AuthService = Depends(get_auth_service),
-) -> dict:
-    token = _extract_bearer_token(authorization)
-    service.logout(token)
-    return {"data": {"message": "Logged out successfully"}, "meta": None}
-
-
-def _extract_bearer_token(authorization: Optional[str]) -> str:
-    if not authorization:
-        raise ApiError(code=ErrorCode.UNAUTHENTICATED, message="Missing Authorization header", status_code=401)
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise ApiError(
-            code=ErrorCode.UNAUTHENTICATED,
-            message="Invalid Authorization header format",
-            status_code=401,
-        )
-    return parts[1]

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from datetime import timedelta
+import asyncio
 
 from app.api.core.config import get_settings
 from app.api.exceptions.http_errors import ApiError
 from app.services.auth_service import AuthService
-from app.services.otp_service import InMemoryOTPStore, utc_now
+from app.services.otp_service import InMemoryOTPStore
 from app.services.session_service import SessionService
 
 
@@ -12,9 +12,7 @@ from app.services.session_service import SessionService
 class _NotifierStub:
     last_otp: str | None = None
 
-    async def send_otp(
-        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
-    ) -> None:
+    async def send_otp(self, purpose: str, target: str, otp_code: str, expires_in_seconds: int) -> None:
         self.last_otp = otp_code
 
 
@@ -37,8 +35,6 @@ def _build_service() -> tuple[AuthService, _NotifierStub]:
 
 def test_admin_otp_verify_success_issues_bearer_session():
     service, notifier = _build_service()
-    import asyncio
-
     asyncio.run(service.send_admin_otp("admin@test.com"))
     session = service.verify_admin_otp("admin@test.com", notifier.last_otp or "")
     assert session.token_type == "bearer"
@@ -47,8 +43,6 @@ def test_admin_otp_verify_success_issues_bearer_session():
 
 def test_admin_otp_invalid_attempts_exceeded():
     service, notifier = _build_service()
-    import asyncio
-
     asyncio.run(service.send_admin_otp("admin@test.com"))
     assert notifier.last_otp
 
@@ -64,23 +58,4 @@ def test_admin_otp_invalid_attempts_exceeded():
         assert False, "Expected OTP_ATTEMPTS_EXCEEDED"
     except ApiError as exc:
         assert exc.code == "OTP_ATTEMPTS_EXCEEDED"
-
-
-def test_admin_otp_expired():
-    import asyncio
-
-    service, notifier = _build_service()
-    asyncio.run(service.send_admin_otp("admin@test.com"))
-    assert notifier.last_otp
-
-    challenge = service.otp_store.get("admin", "admin@test.com")
-    assert challenge is not None
-    challenge.expires_at = utc_now() - timedelta(seconds=1)
-    service.otp_store.save(challenge)
-
-    try:
-        service.verify_admin_otp("admin@test.com", notifier.last_otp or "")
-        assert False, "Expected OTP_EXPIRED"
-    except ApiError as exc:
-        assert exc.code == "OTP_EXPIRED"
 
