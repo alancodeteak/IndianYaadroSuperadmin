@@ -105,3 +105,97 @@ class SupermarketListMeta(BaseModel):
     total: int
     totalPages: int
 
+
+class SupermarketListFilters(BaseModel):
+    name: str | None = None
+    user_id: int | None = None
+    shop_id: str | None = None
+    phone: str | None = None
+
+
+class SupermarketDetailAddress(BaseModel):
+    street_address: str
+    city: str
+    state: str
+    pincode: str
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+
+
+class SupermarketDetailSubscription(BaseModel):
+    subscription_id: int
+    start_date: datetime
+    end_date: datetime
+    amount: Decimal
+    status: str
+    last_payment_date: datetime | None = None
+
+
+class SupermarketDetailPromotion(BaseModel):
+    promotion_link: str | None = None
+    promotion_header: str | None = None
+    promotion_content: str | None = None
+    promotion_image_s3_key: str | None = None
+    is_marketing_enabled: bool
+
+
+class SupermarketDetailDeliveryPartner(BaseModel):
+    delivery_partner_id: str
+    first_name: str
+    last_name: str | None = None
+    phone1: int
+    email: str | None = None
+    online_status: str
+    current_status: str
+    photo: str
+    vehicle_detail: str | None = None
+    rating: Decimal | None = None
+    created_at: datetime
+
+
+class SupermarketDetailInvoice(BaseModel):
+    invoice_id: int
+    invoice_number: str
+    billing_period_start: datetime
+    billing_period_end: datetime
+    amount: Decimal
+    status: str
+    document_type: str
+    paid_at: datetime | None = None
+    created_at: datetime
+
+
+class SupermarketDailyOrderStat(BaseModel):
+    date: str
+    order_count: int
+    total_amount: Decimal
+    status_counts: dict[str, int]
+
+
+class SupermarketDetailShopOwner(BaseModel):
+    shop_id: str
+    user_id: int
+    shop_name: str
+    phone: str | None = None
+    email: str | None = None
+    photo: str | None = None
+    status: str
+    payment_status: str
+    is_blocked: bool
+    geo_coordinates: dict[str, Any] | None = None
+    upi_id: str | None = None
+    rating: Decimal | None = None
+    delivery_time: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupermarketDetailResponse(BaseModel):
+    shop_owner: SupermarketDetailShopOwner
+    address: SupermarketDetailAddress
+    subscription: SupermarketDetailSubscription | None = None
+    promotion: SupermarketDetailPromotion | None = None
+    delivery_partners: list[SupermarketDetailDeliveryPartner]
+    subscription_invoices: list[SupermarketDetailInvoice]
+    daily_order_stats: list[SupermarketDailyOrderStat] | None = None
+
