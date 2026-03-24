@@ -12,7 +12,7 @@ router = APIRouter(prefix="/login", tags=["login"])
 async def send_scoped_otp(
     payload: ScopedSendOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
-    service.send_otp(scope=payload.scope, email=payload.email)
+    await service.send_otp(scope=payload.scope, email=payload.email)
     return {
         "data": OTPResponse(message="OTP sent successfully", code=ErrorCode.OTP_SENT).model_dump(),
         "meta": None,

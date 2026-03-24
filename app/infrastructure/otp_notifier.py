@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import smtplib
 from email.message import EmailMessage
+from time import perf_counter
 
 from starlette import status
 
@@ -24,11 +26,24 @@ class SMTPOTPNotifier(OTPNotifier):
     def __init__(self, settings: Settings):
         self.settings = settings
 
-    def send_otp(self, purpose: str, target: str, otp_code: str, expires_in_seconds: int) -> None:
+    async def send_otp(
+        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
+    ) -> None:
         if not self.settings.SMTP_ENABLED:
             self._log_fallback(purpose, target, expires_in_seconds, otp_code)
             return
 
+        await asyncio.to_thread(
+            self._send_otp_sync,
+            purpose,
+            target,
+            otp_code,
+            expires_in_seconds,
+        )
+
+    def _send_otp_sync(
+        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
+    ) -> None:
         masked_target = _mask_target(target)
         msg = EmailMessage()
         msg["Subject"] = f"Your Yadro OTP ({purpose})"
@@ -40,6 +55,7 @@ class SMTPOTPNotifier(OTPNotifier):
             "If you did not request this OTP, please ignore this email."
         )
 
+        connect_started = perf_counter()
         try:
             if self.settings.SMTP_USE_SSL:
                 with smtplib.SMTP_SSL(
@@ -47,18 +63,26 @@ class SMTPOTPNotifier(OTPNotifier):
                     port=self.settings.SMTP_PORT,
                     timeout=10,
                 ) as client:
+                    connected_at = perf_counter()
                     client.login(self.settings.SMTP_USERNAME, self.settings.SMTP_PASSWORD)
+                    logged_in_at = perf_counter()
                     client.send_message(msg)
+                    sent_at = perf_counter()
             else:
                 with smtplib.SMTP(
                     host=self.settings.SMTP_HOST,
                     port=self.settings.SMTP_PORT,
                     timeout=10,
                 ) as client:
+                    connected_at = perf_counter()
                     if self.settings.SMTP_USE_TLS:
+                        tls_started = perf_counter()
                         client.starttls()
+                        tls_done = perf_counter()
                     client.login(self.settings.SMTP_USERNAME, self.settings.SMTP_PASSWORD)
+                    logged_in_at = perf_counter()
                     client.send_message(msg)
+                    sent_at = perf_counter()
         except Exception:
             log.exception(
                 "otp_dispatch_failed",
@@ -83,6 +107,17 @@ class SMTPOTPNotifier(OTPNotifier):
                 "otp_length": len(otp_code),
             },
         )
+        timing_payload = {
+            "purpose": purpose,
+            "target": masked_target,
+            "connect_ms": round((connected_at - connect_started) * 1000, 2),
+            "login_ms": round((logged_in_at - connected_at) * 1000, 2),
+            "send_ms": round((sent_at - logged_in_at) * 1000, 2),
+            "total_ms": round((sent_at - connect_started) * 1000, 2),
+        }
+        if not self.settings.SMTP_USE_SSL and self.settings.SMTP_USE_TLS:
+            timing_payload["tls_ms"] = round((tls_done - tls_started) * 1000, 2)
+        log.info("otp_dispatch_timing", extra=timing_payload)
         log_otp_code(
             purpose=purpose,
             target=masked_target,

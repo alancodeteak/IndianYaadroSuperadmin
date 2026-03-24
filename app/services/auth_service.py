@@ -47,15 +47,15 @@ class AuthService:
         self.otp_notifier = otp_notifier
         self.session_service = session_service
 
-    def send_admin_otp(self, email: str) -> None:
-        self._send_otp(purpose="admin", role=Role.SUPERADMIN, email=email)
+    async def send_admin_otp(self, email: str) -> None:
+        await self._send_otp(purpose="admin", role=Role.SUPERADMIN, email=email)
 
-    def send_portal_otp(self, email: str) -> None:
-        self._send_otp(purpose="portal", role=Role.PORTAL_USER, email=email)
+    async def send_portal_otp(self, email: str) -> None:
+        await self._send_otp(purpose="portal", role=Role.PORTAL_USER, email=email)
 
-    def send_otp(self, scope: Literal["admin", "portal"], email: str) -> None:
+    async def send_otp(self, scope: Literal["admin", "portal"], email: str) -> None:
         purpose, role = _scope_to_context(scope)
-        self._send_otp(purpose=purpose, role=role, email=email)
+        await self._send_otp(purpose=purpose, role=role, email=email)
 
     def verify_admin_otp(self, email: str, otp_code: str) -> AuthSession:
         return self._verify_otp(purpose="admin", role=Role.SUPERADMIN, email=email, otp_code=otp_code)
@@ -76,7 +76,7 @@ class AuthService:
         if jti and exp:
             self.session_service.revoke_jti(jti=jti, exp_timestamp=exp)
 
-    def _send_otp(self, purpose: str, role: Role, email: str) -> None:
+    async def _send_otp(self, purpose: str, role: Role, email: str) -> None:
         normalized = _normalize_email(email)
         self._ensure_email_allowed(purpose, normalized)
         now = utc_now()
@@ -99,7 +99,7 @@ class AuthService:
             next_send_at=expiry_from_now(self.settings.OTP_RESEND_COOLDOWN_SECONDS),
         )
         self.otp_store.save(challenge)
-        self.otp_notifier.send_otp(purpose, normalized, otp_code, self.settings.OTP_TTL_SECONDS)
+        await self.otp_notifier.send_otp(purpose, normalized, otp_code, self.settings.OTP_TTL_SECONDS)
 
         log.info(
             "otp_requested",

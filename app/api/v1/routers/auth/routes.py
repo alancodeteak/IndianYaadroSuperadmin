@@ -18,7 +18,7 @@ async def login_page() -> dict:
 
 @router.post("/send-otp")
 async def send_otp(payload: SendOTPRequest, service: AuthService = Depends(get_auth_service)) -> dict:
-    service.send_admin_otp(email=str(payload.email))
+    await service.send_admin_otp(email=str(payload.email))
     return {
         "data": OTPResponse(message="OTP sent successfully", code=ErrorCode.OTP_SENT).model_dump(),
         "meta": None,

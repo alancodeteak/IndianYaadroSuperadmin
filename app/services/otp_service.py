@@ -23,7 +23,9 @@ class OTPStore(Protocol):
 
 
 class OTPNotifier(Protocol):
-    def send_otp(self, purpose: str, target: str, otp_code: str, expires_in_seconds: int) -> None: ...
+    async def send_otp(
+        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
+    ) -> None: ...
 
 
 class InMemoryOTPStore:

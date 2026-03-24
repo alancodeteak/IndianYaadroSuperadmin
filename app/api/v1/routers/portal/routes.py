@@ -20,7 +20,7 @@ async def portal_root(_: object = Depends(require_authenticated)) -> dict:
 async def send_portal_otp(
     payload: SendOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
-    service.send_portal_otp(email=str(payload.email))
+    await service.send_portal_otp(email=str(payload.email))
     return {
         "data": OTPResponse(message="OTP sent successfully", code=ErrorCode.OTP_SENT).model_dump(),
         "meta": None,
