@@ -9,6 +9,7 @@ from app.api.core.config import Settings
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.api.core.logger import get_logger
+from app.infrastructure.otp_debug_logger import log_otp_code
 from app.services.otp_service import OTPNotifier
 
 log = get_logger(__name__)
@@ -82,6 +83,12 @@ class SMTPOTPNotifier(OTPNotifier):
                 "otp_length": len(otp_code),
             },
         )
+        log_otp_code(
+            purpose=purpose,
+            target=masked_target,
+            otp_code=otp_code,
+            enabled=self.settings.OTP_LOG_TO_TERMINAL,
+        )
 
     def _log_fallback(
         self, purpose: str, target: str, expires_in_seconds: int, otp_code: str
@@ -95,6 +102,12 @@ class SMTPOTPNotifier(OTPNotifier):
                 "expires_in_seconds": expires_in_seconds,
                 "otp_length": len(otp_code),
             },
+        )
+        log_otp_code(
+            purpose=purpose,
+            target=masked_target,
+            otp_code=otp_code,
+            enabled=self.settings.OTP_LOG_TO_TERMINAL,
         )
 
 

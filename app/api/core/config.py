@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     OTP_TTL_SECONDS: int = 300
     OTP_RESEND_COOLDOWN_SECONDS: int = 60
     OTP_MAX_ATTEMPTS: int = 5
+    OTP_LOG_TO_TERMINAL: bool = False
     ADMIN_OTP_EMAILS: str = ""
     PORTAL_OTP_EMAILS: str = ""
     SMTP_ENABLED: bool = False
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
 
     REDIS_URL: str | None = None
     DEFAULT_PAGE_SIZE: int = 20
-    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
     ALLOWED_HOSTS: str = "localhost,127.0.0.1,testserver"
     FORCE_HTTPS_REDIRECT: bool = False
 
