@@ -87,3 +87,21 @@ class ShopOwnerListItem(BaseModel):
     is_blocked: bool
     is_deleted: bool
 
+
+class SupermarketListItem(BaseModel):
+    photo: str | None = None
+    shop_name: str
+    user_id: int
+    phone: str | None = None
+    location: str
+    geo_coordinates: dict[str, Any] | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+
+
+class SupermarketListMeta(BaseModel):
+    currentPage: int
+    limit: int
+    total: int
+    totalPages: int
+
