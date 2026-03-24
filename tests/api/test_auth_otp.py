@@ -13,7 +13,9 @@ from app.services.otp_service import InMemoryOTPStore
 class _NotifierStub:
     last_otp: str | None = None
 
-    def send_otp(self, purpose: str, target: str, otp_code: str, expires_in_seconds: int) -> None:
+    async def send_otp(
+        self, purpose: str, target: str, otp_code: str, expires_in_seconds: int
+    ) -> None:
         self.last_otp = otp_code
 
 
@@ -94,5 +96,19 @@ def test_scoped_login_endpoints_work_for_admin():
     )
     assert verify_resp.status_code == 200
     assert verify_resp.json()["data"]["role"] == "SUPERADMIN"
+    app.dependency_overrides.clear()
+
+
+def test_send_otp_rejects_email_not_in_allowlist():
+    service, _ = _build_auth_service("admin@test.com", "portal@test.com")
+    app.dependency_overrides[get_auth_service] = lambda: service
+    client = TestClient(app)
+
+    send_resp = client.post(
+        "/login/send-otp",
+        json={"scope": "admin", "email": "not-allowed@test.com"},
+    )
+    assert send_resp.status_code == 403
+    assert send_resp.json()["error"]["code"] == "UNAUTHORIZED"
     app.dependency_overrides.clear()
 

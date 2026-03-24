@@ -1,4 +1,5 @@
 import smtplib
+import asyncio
 
 import pytest
 
@@ -58,7 +59,7 @@ def test_smtp_notifier_send_success(monkeypatch):
 
     monkeypatch.setattr(smtplib, "SMTP", _factory)
     notifier = SMTPOTPNotifier(settings=settings)
-    notifier.send_otp("admin", "admin@test.com", "123456", 300)
+    asyncio.run(notifier.send_otp("admin", "admin@test.com", "123456", 300))
 
     assert stub.started_tls is True
     assert stub.logged_in is True
@@ -79,6 +80,6 @@ def test_smtp_notifier_send_failure_maps_api_error(monkeypatch):
     notifier = SMTPOTPNotifier(settings=settings)
 
     with pytest.raises(ApiError) as exc:
-        notifier.send_otp("portal", "portal@test.com", "654321", 300)
+        asyncio.run(notifier.send_otp("portal", "portal@test.com", "654321", 300))
 
     assert exc.value.code == "OTP_DELIVERY_FAILED"
