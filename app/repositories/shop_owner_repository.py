@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -81,10 +81,35 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         return items, total
 
     def get_supermarket_detail_by_user_id(self, user_id: int) -> dict[str, Any] | None:
+        # IMPORTANT:
+        # We avoid loading full ORM entities here because enum-mapped columns can raise
+        # LookupError when DB contains values that don't match the Python Enum mapping.
+        # Instead, select explicit columns and cast enums to String.
+
         base_stmt = (
             select(
-                ShopOwner,
-                Address,
+                ShopOwner.shop_id,
+                ShopOwner.user_id,
+                ShopOwner.shop_name,
+                ShopOwner.phone,
+                ShopOwner.email,
+                ShopOwner.photo,
+                cast(ShopOwner.status, String).label("status"),
+                cast(ShopOwner.payment_status, String).label("payment_status"),
+                ShopOwner.is_blocked,
+                ShopOwner.geo_coordinates,
+                ShopOwner.upi_id,
+                ShopOwner.rating,
+                ShopOwner.delivery_time,
+                ShopOwner.created_at,
+                ShopOwner.updated_at,
+                ShopOwner.address_id,
+                Address.street_address,
+                Address.city,
+                Address.state,
+                Address.pincode,
+                Address.latitude,
+                Address.longitude,
             )
             .join(Address, Address.id == ShopOwner.address_id)
             .where(
@@ -93,101 +118,134 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 ShopOwner.is_deleted.is_(False),
             )
         )
-        base_row = self.db.execute(base_stmt).first()
-        if base_row is None:
+        row = self.db.execute(base_stmt).first()
+        if row is None:
             return None
 
-        shop_owner: ShopOwner = base_row[0]
-        address: Address = base_row[1]
+        shop_id = str(row.shop_id)
 
-        subscription = self.db.scalar(
-            select(Subscription).where(Subscription.shop_id == shop_owner.shop_id)
-        )
-        promotion = self.db.scalar(
-            select(ShopOwnerPromotion).where(ShopOwnerPromotion.shop_id == shop_owner.shop_id)
-        )
-        partners = list(
-            self.db.scalars(
-                select(DeliveryPartner)
-                .where(
-                    DeliveryPartner.shop_id == shop_owner.shop_id,
-                    DeliveryPartner.is_deleted.is_(False),
-                )
-                .order_by(DeliveryPartner.created_at.desc())
-            ).all()
-        )
-        invoices = list(
-            self.db.scalars(
-                select(SubscriptionInvoice)
-                .where(SubscriptionInvoice.shop_id == shop_owner.shop_id)
-                .order_by(SubscriptionInvoice.created_at.desc())
-            ).all()
-        )
+        subscription_row = self.db.execute(
+            select(
+                Subscription.subscription_id,
+                Subscription.start_date,
+                Subscription.end_date,
+                Subscription.amount,
+                cast(Subscription.status, String).label("status"),
+                Subscription.last_payment_date,
+            ).where(Subscription.shop_id == shop_id)
+        ).first()
+
+        promotion_row = self.db.execute(
+            select(
+                ShopOwnerPromotion.promotion_link,
+                ShopOwnerPromotion.promotion_header,
+                ShopOwnerPromotion.promotion_content,
+                ShopOwnerPromotion.promotion_image_s3_key,
+                ShopOwnerPromotion.is_marketing_enabled,
+            ).where(ShopOwnerPromotion.shop_id == shop_id)
+        ).first()
+
+        partner_rows = self.db.execute(
+            select(
+                DeliveryPartner.delivery_partner_id,
+                DeliveryPartner.first_name,
+                DeliveryPartner.last_name,
+                DeliveryPartner.phone1,
+                DeliveryPartner.email,
+                cast(DeliveryPartner.online_status, String).label("online_status"),
+                cast(DeliveryPartner.current_status, String).label("current_status"),
+                DeliveryPartner.photo,
+                DeliveryPartner.vehicle_detail,
+                DeliveryPartner.rating,
+                DeliveryPartner.created_at,
+            )
+            .where(
+                DeliveryPartner.shop_id == shop_id,
+                DeliveryPartner.is_deleted.is_(False),
+            )
+            .order_by(DeliveryPartner.created_at.desc())
+        ).all()
+
+        invoice_rows = self.db.execute(
+            select(
+                SubscriptionInvoice.invoice_id,
+                SubscriptionInvoice.invoice_number,
+                SubscriptionInvoice.billing_period_start,
+                SubscriptionInvoice.billing_period_end,
+                SubscriptionInvoice.amount,
+                cast(SubscriptionInvoice.status, String).label("status"),
+                cast(SubscriptionInvoice.document_type, String).label("document_type"),
+                SubscriptionInvoice.paid_at,
+                SubscriptionInvoice.created_at,
+            )
+            .where(SubscriptionInvoice.shop_id == shop_id)
+            .order_by(SubscriptionInvoice.created_at.desc())
+        ).all()
 
         return {
             "shop_owner": {
-                "shop_id": shop_owner.shop_id,
-                "user_id": shop_owner.user_id,
-                "shop_name": shop_owner.shop_name,
-                "phone": shop_owner.phone,
-                "email": shop_owner.email,
-                "photo": shop_owner.photo,
-                "status": str(shop_owner.status),
-                "payment_status": str(shop_owner.payment_status),
-                "is_blocked": shop_owner.is_blocked,
-                "geo_coordinates": shop_owner.geo_coordinates,
-                "upi_id": shop_owner.upi_id,
-                "rating": shop_owner.rating,
-                "delivery_time": shop_owner.delivery_time,
-                "created_at": shop_owner.created_at,
-                "updated_at": shop_owner.updated_at,
+                "shop_id": shop_id,
+                "user_id": int(row.user_id),
+                "shop_name": row.shop_name,
+                "phone": row.phone,
+                "email": row.email,
+                "photo": row.photo,
+                "status": row.status,
+                "payment_status": row.payment_status,
+                "is_blocked": bool(row.is_blocked),
+                "geo_coordinates": row.geo_coordinates,
+                "upi_id": row.upi_id,
+                "rating": row.rating,
+                "delivery_time": row.delivery_time,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
             },
             "address": {
-                "street_address": address.street_address,
-                "city": address.city,
-                "state": address.state,
-                "pincode": address.pincode,
-                "latitude": address.latitude,
-                "longitude": address.longitude,
+                "street_address": row.street_address,
+                "city": row.city,
+                "state": row.state,
+                "pincode": row.pincode,
+                "latitude": row.latitude,
+                "longitude": row.longitude,
             },
             "subscription": (
                 {
-                    "subscription_id": subscription.subscription_id,
-                    "start_date": subscription.start_date,
-                    "end_date": subscription.end_date,
-                    "amount": subscription.amount,
-                    "status": str(subscription.status),
-                    "last_payment_date": subscription.last_payment_date,
+                    "subscription_id": subscription_row.subscription_id,
+                    "start_date": subscription_row.start_date,
+                    "end_date": subscription_row.end_date,
+                    "amount": subscription_row.amount,
+                    "status": subscription_row.status,
+                    "last_payment_date": subscription_row.last_payment_date,
                 }
-                if subscription
+                if subscription_row
                 else None
             ),
             "promotion": (
                 {
-                    "promotion_link": promotion.promotion_link,
-                    "promotion_header": promotion.promotion_header,
-                    "promotion_content": promotion.promotion_content,
-                    "promotion_image_s3_key": promotion.promotion_image_s3_key,
-                    "is_marketing_enabled": promotion.is_marketing_enabled,
+                    "promotion_link": promotion_row.promotion_link,
+                    "promotion_header": promotion_row.promotion_header,
+                    "promotion_content": promotion_row.promotion_content,
+                    "promotion_image_s3_key": promotion_row.promotion_image_s3_key,
+                    "is_marketing_enabled": promotion_row.is_marketing_enabled,
                 }
-                if promotion
+                if promotion_row
                 else None
             ),
             "delivery_partners": [
                 {
-                    "delivery_partner_id": partner.delivery_partner_id,
-                    "first_name": partner.first_name,
-                    "last_name": partner.last_name,
-                    "phone1": partner.phone1,
-                    "email": partner.email,
-                    "online_status": str(partner.online_status),
-                    "current_status": str(partner.current_status),
-                    "photo": partner.photo,
-                    "vehicle_detail": partner.vehicle_detail,
-                    "rating": partner.rating,
-                    "created_at": partner.created_at,
+                    "delivery_partner_id": p.delivery_partner_id,
+                    "first_name": p.first_name,
+                    "last_name": p.last_name,
+                    "phone1": p.phone1,
+                    "email": p.email,
+                    "online_status": p.online_status,
+                    "current_status": p.current_status,
+                    "photo": p.photo,
+                    "vehicle_detail": p.vehicle_detail,
+                    "rating": p.rating,
+                    "created_at": p.created_at,
                 }
-                for partner in partners
+                for p in partner_rows
             ],
             "subscription_invoices": [
                 {
@@ -196,14 +254,14 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     "billing_period_start": inv.billing_period_start,
                     "billing_period_end": inv.billing_period_end,
                     "amount": inv.amount,
-                    "status": str(inv.status),
-                    "document_type": str(inv.document_type),
+                    "status": inv.status,
+                    "document_type": inv.document_type,
                     "paid_at": inv.paid_at,
                     "created_at": inv.created_at,
                 }
-                for inv in invoices
+                for inv in invoice_rows
             ],
-            "daily_order_stats": self._daily_order_stats(shop_owner.shop_id),
+            "daily_order_stats": self._daily_order_stats(shop_id),
         }
 
     def _daily_order_stats(self, shop_id: str) -> list[dict[str, Any]]:
@@ -211,7 +269,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         rows = self.db.execute(
             select(
                 func.date(Order.created_at).label("day"),
-                Order.order_status,
+                cast(Order.order_status, String).label("order_status"),
                 func.count(Order.order_id).label("count"),
                 func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
             )
@@ -220,7 +278,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 Order.is_deleted.is_(False),
                 func.date(Order.created_at) >= start_date,
             )
-            .group_by(func.date(Order.created_at), Order.order_status)
+            .group_by(func.date(Order.created_at), cast(Order.order_status, String))
             .order_by(func.date(Order.created_at).asc())
         ).all()
         daily: dict[str, dict[str, Any]] = {}
