@@ -17,11 +17,13 @@ from app.api.v1.schemas.shop_owner import (
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 from app.infrastructure.db.models.address import Address
 from app.infrastructure.db.models.delivery_partner import DeliveryPartner
+from app.infrastructure.db.models.enums import ShopPaymentStatus, ShopStatus, SubscriptionStatus
 from app.infrastructure.db.models.order import Order
 from app.infrastructure.db.models.shop_owner import ShopOwner
 from app.infrastructure.db.models.shop_owner_promotion import ShopOwnerPromotion
 from app.infrastructure.db.models.subscription import Subscription
 from app.infrastructure.db.models.subscription_invoice import SubscriptionInvoice
+from app.infrastructure.storage.s3 import is_http_url, presigned_get_url
 
 
 class ShopOwnerRepository(AbstractShopOwnerRepository):
@@ -93,17 +95,32 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 ShopOwner.shop_name,
                 ShopOwner.phone,
                 ShopOwner.email,
+                ShopOwner.shop_license_no,
                 ShopOwner.photo,
+                ShopOwner.device_token,
                 cast(ShopOwner.status, String).label("status"),
                 cast(ShopOwner.payment_status, String).label("payment_status"),
                 ShopOwner.is_blocked,
+                ShopOwner.block_reason,
                 ShopOwner.geo_coordinates,
+                ShopOwner.auto_assigned,
+                ShopOwner.self_assigned,
+                ShopOwner.is_web_app,
                 ShopOwner.upi_id,
                 ShopOwner.rating,
                 ShopOwner.delivery_time,
+                ShopOwner.contact_person_number,
+                ShopOwner.contact_person_email,
+                ShopOwner.is_sms_activated,
+                ShopOwner.single_sms,
+                ShopOwner.is_automated,
+                ShopOwner.whatsapp,
+                ShopOwner.task_id,
+                ShopOwner.last_login_at,
                 ShopOwner.created_at,
                 ShopOwner.updated_at,
                 ShopOwner.address_id,
+                ShopOwner.subscription_id,
                 Address.street_address,
                 Address.city,
                 Address.state,
@@ -189,16 +206,41 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 "shop_name": row.shop_name,
                 "phone": row.phone,
                 "email": row.email,
+                "shop_license_no": row.shop_license_no,
                 "photo": row.photo,
+                "photo_url": (
+                    row.photo
+                    if (row.photo and is_http_url(str(row.photo)))
+                    else (
+                        presigned_get_url(purpose="shop_owner", key=str(row.photo))
+                        if row.photo
+                        else None
+                    )
+                ),
+                "device_token": row.device_token,
                 "status": row.status,
                 "payment_status": row.payment_status,
                 "is_blocked": bool(row.is_blocked),
+                "block_reason": row.block_reason,
                 "geo_coordinates": row.geo_coordinates,
+                "auto_assigned": bool(row.auto_assigned),
+                "self_assigned": bool(row.self_assigned),
+                "is_web_app": bool(row.is_web_app),
                 "upi_id": row.upi_id,
                 "rating": row.rating,
                 "delivery_time": row.delivery_time,
+                "contact_person_number": row.contact_person_number,
+                "contact_person_email": row.contact_person_email,
+                "is_sms_activated": bool(row.is_sms_activated),
+                "single_sms": bool(row.single_sms),
+                "is_automated": bool(row.is_automated),
+                "whatsapp": bool(row.whatsapp),
+                "task_id": row.task_id,
+                "last_login_at": row.last_login_at,
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
+                "address_id": int(row.address_id),
+                "subscription_id": int(row.subscription_id) if row.subscription_id is not None else None,
             },
             "address": {
                 "street_address": row.street_address,
@@ -226,6 +268,21 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     "promotion_header": promotion_row.promotion_header,
                     "promotion_content": promotion_row.promotion_content,
                     "promotion_image_s3_key": promotion_row.promotion_image_s3_key,
+                    "promotion_image_url": (
+                        promotion_row.promotion_image_s3_key
+                        if (
+                            promotion_row.promotion_image_s3_key
+                            and is_http_url(str(promotion_row.promotion_image_s3_key))
+                        )
+                        else (
+                            presigned_get_url(
+                                purpose="shop_owner",
+                                key=str(promotion_row.promotion_image_s3_key),
+                            )
+                            if promotion_row.promotion_image_s3_key
+                            else None
+                        )
+                    ),
                     "is_marketing_enabled": promotion_row.is_marketing_enabled,
                 }
                 if promotion_row
@@ -442,6 +499,9 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             upi_id=payload.upi_id,
             delivery_time=payload.delivery_time if payload.delivery_time is not None else 30,
             is_supermarket=True,
+            # DB enum expects lowercase values (e.g. "active"), not Enum names (e.g. "ACTIVE").
+            status=ShopStatus.ACTIVE.value,
+            payment_status=ShopPaymentStatus.PENDING.value,
         )
         self.db.add(shop_owner)
         self.db.flush()
@@ -462,7 +522,9 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     start_date=payload.subscription.start_date,
                     end_date=payload.subscription.end_date,
                     amount=payload.subscription.amount,
-                    status=payload.subscription.status,
+                    status=payload.subscription.status.value
+                    if isinstance(payload.subscription.status, SubscriptionStatus)
+                    else str(payload.subscription.status),
                 )
                 self.db.add(sub)
                 self.db.flush()
@@ -509,6 +571,18 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
 
         patch = payload.model_dump(exclude_unset=True)
+
+        # Normalize enum objects to DB enum values (lowercase strings).
+        if "status" in patch and patch["status"] is not None:
+            if isinstance(patch["status"], ShopStatus):
+                patch["status"] = patch["status"].value
+            else:
+                patch["status"] = str(patch["status"])
+        if "payment_status" in patch and patch["payment_status"] is not None:
+            if isinstance(patch["payment_status"], ShopPaymentStatus):
+                patch["payment_status"] = patch["payment_status"].value
+            else:
+                patch["payment_status"] = str(patch["payment_status"])
 
         # Nested address update (if provided)
         address_patch = patch.pop("address", None)

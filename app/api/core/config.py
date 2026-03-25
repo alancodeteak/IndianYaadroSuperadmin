@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     ENABLE_METRICS_API_KEY_PROTECTION: bool = True
     ENABLE_DETAILED_HEALTH: bool = False
 
+    # AWS / S3 (uploads & image access)
+    AWS_REGION: str = ""
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_ACCOUNT_ID: str = ""
+    AWS_S3_KMS_KEY_ID: str = ""
+    S3_PRESIGNED_URL_EXPIRY: int = 3600
+    S3_MAX_FILE_SIZE: int = 10_485_760
+    PROD_S3_BUCKET_DELIVERY_PARTNER: str = ""
+    PROD_S3_BUCKET_ORDERS: str = ""
+    PROD_S3_BUCKET_TICKETS: str = ""
+    PROD_S3_BUCKET_SHOP_OWNER: str = ""
+
+    TZ: str = "UTC"
+
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
         if self.ENVIRONMENT.lower() in {"production", "prod"}:

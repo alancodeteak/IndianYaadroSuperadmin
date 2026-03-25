@@ -6,5 +6,6 @@ alembic
 psycopg2-binary
 pydantic
 pydantic-settings
+boto3
 pytest
 httpx
