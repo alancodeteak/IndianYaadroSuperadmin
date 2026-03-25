@@ -4,9 +4,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.v1.schemas.shop_owner import SupermarketListFilters
+from app.api.exceptions.error_codes import ErrorCode
+from app.api.exceptions.http_errors import ApiError
+from app.api.v1.schemas.shop_owner import SupermarketCreateRequest, SupermarketListFilters
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 from app.infrastructure.db.models.address import Address
 from app.infrastructure.db.models.delivery_partner import DeliveryPartner
@@ -230,4 +233,148 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             daily[key]["status_counts"][str(row.order_status)] = int(row.count)
             daily[key]["total_amount"] += row.amount
         return list(daily.values())
+
+    def create_supermarket(self, payload: SupermarketCreateRequest) -> str:
+        shop_id = f"SHOP{payload.user_id}"
+        if len(shop_id) > 50:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="user_id is too large to derive a valid shop_id",
+                status_code=400,
+                details={"max_shop_id_length": 50},
+            )
+
+        def _exists_user_id() -> bool:
+            return bool(
+                self.db.scalar(
+                    select(func.count(ShopOwner.id)).where(ShopOwner.user_id == payload.user_id)
+                )
+            )
+
+        def _exists_shop_id() -> bool:
+            return bool(
+                self.db.scalar(select(func.count(ShopOwner.id)).where(ShopOwner.shop_id == shop_id))
+            )
+
+        if _exists_user_id():
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="A shop owner with this user_id already exists",
+                status_code=409,
+                details={"field": "user_id"},
+            )
+        if _exists_shop_id():
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="A shop owner with this derived shop_id already exists",
+                status_code=409,
+                details={"field": "shop_id", "shop_id": shop_id},
+            )
+
+        if payload.email and payload.email.strip():
+            email_norm = payload.email.strip()
+            dup_email = self.db.scalar(
+                select(func.count(ShopOwner.id)).where(ShopOwner.email == email_norm)
+            )
+            if dup_email:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="email is already in use",
+                    status_code=409,
+                    details={"field": "email"},
+                )
+
+        if payload.shop_license_no and payload.shop_license_no.strip():
+            lic = payload.shop_license_no.strip()
+            dup_lic = self.db.scalar(
+                select(func.count(ShopOwner.id)).where(ShopOwner.shop_license_no == lic)
+            )
+            if dup_lic:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="shop_license_no is already in use",
+                    status_code=409,
+                    details={"field": "shop_license_no"},
+                )
+
+        addr = payload.address
+        address = Address(
+            street_address=addr.street_address,
+            city=addr.city,
+            state=addr.state,
+            pincode=addr.pincode,
+            latitude=addr.latitude,
+            longitude=addr.longitude,
+        )
+        self.db.add(address)
+        self.db.flush()
+
+        shop_owner = ShopOwner(
+            shop_id=shop_id,
+            user_id=payload.user_id,
+            shop_name=payload.shop_name,
+            password=payload.password,
+            phone=payload.phone,
+            email=payload.email.strip() if payload.email and payload.email.strip() else None,
+            shop_license_no=(
+                payload.shop_license_no.strip()
+                if payload.shop_license_no and payload.shop_license_no.strip()
+                else None
+            ),
+            photo=payload.photo,
+            address_id=address.id,
+            geo_coordinates=payload.geo_coordinates,
+            upi_id=payload.upi_id,
+            delivery_time=payload.delivery_time if payload.delivery_time is not None else 30,
+            is_supermarket=True,
+        )
+        self.db.add(shop_owner)
+        self.db.flush()
+
+        if payload.subscription is not None:
+            # Some clients may send an incomplete subscription payload.
+            # If any required subscription fields are missing, ignore it.
+            subscription_complete = (
+                payload.subscription.start_date is not None
+                and payload.subscription.end_date is not None
+                and payload.subscription.amount is not None
+            )
+            if not subscription_complete:
+                pass
+            else:
+                sub = Subscription(
+                    shop_id=shop_id,
+                    start_date=payload.subscription.start_date,
+                    end_date=payload.subscription.end_date,
+                    amount=payload.subscription.amount,
+                    status=payload.subscription.status,
+                )
+                self.db.add(sub)
+                self.db.flush()
+                shop_owner.subscription_id = sub.subscription_id
+
+        if payload.promotion is not None:
+            promo = payload.promotion
+            self.db.add(
+                ShopOwnerPromotion(
+                    shop_id=shop_id,
+                    promotion_link=promo.promotion_link,
+                    promotion_header=promo.promotion_header,
+                    promotion_content=promo.promotion_content,
+                    promotion_image_s3_key=promo.promotion_image_s3_key,
+                    is_marketing_enabled=promo.is_marketing_enabled,
+                )
+            )
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="Could not create supermarket due to a data conflict",
+                status_code=409,
+            ) from exc
+
+        return shop_id
 

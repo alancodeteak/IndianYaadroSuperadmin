@@ -2,9 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.infrastructure.db.models.enums import ShopPaymentStatus, ShopStatus
+from app.infrastructure.db.models.enums import (
+    ShopPaymentStatus,
+    ShopStatus,
+    SubscriptionStatus,
+)
 
 
 class ShopOwnerBase(BaseModel):
@@ -111,6 +115,56 @@ class SupermarketListFilters(BaseModel):
     user_id: int | None = None
     shop_id: str | None = None
     phone: str | None = None
+
+
+class SupermarketCreateAddress(BaseModel):
+    street_address: str = Field(max_length=250)
+    city: str = Field(max_length=100)
+    state: str = Field(max_length=100)
+    pincode: str = Field(max_length=20)
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+
+
+class SupermarketCreateSubscription(BaseModel):
+    # Subscription is optional at the supermarket level, but some clients may send an
+    # incomplete `subscription` object. We allow partial payloads and decide in the
+    # repository whether to create the subscription or ignore it.
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    amount: Decimal | None = None
+    status: SubscriptionStatus = SubscriptionStatus.ACTIVE
+
+    @model_validator(mode="after")
+    def end_after_start(self) -> "SupermarketCreateSubscription":
+        if self.start_date is not None and self.end_date is not None:
+            if self.end_date <= self.start_date:
+                raise ValueError("end_date must be after start_date")
+        return self
+
+
+class SupermarketCreatePromotion(BaseModel):
+    promotion_link: str | None = Field(default=None, max_length=512)
+    promotion_header: str | None = Field(default=None, max_length=255)
+    promotion_content: str | None = None
+    promotion_image_s3_key: str | None = Field(default=None, max_length=512)
+    is_marketing_enabled: bool = False
+
+
+class SupermarketCreateRequest(BaseModel):
+    user_id: int = Field(gt=0)
+    shop_name: str = Field(max_length=200)
+    password: str = Field(max_length=255)
+    address: SupermarketCreateAddress
+    phone: str | None = Field(default=None, max_length=20)
+    email: str | None = Field(default=None, max_length=100)
+    shop_license_no: str | None = Field(default=None, max_length=100)
+    photo: str | None = Field(default=None, max_length=255)
+    geo_coordinates: dict[str, Any] | None = None
+    upi_id: str | None = Field(default=None, max_length=100)
+    delivery_time: int | None = Field(default=None, ge=0)
+    subscription: SupermarketCreateSubscription | None = None
+    promotion: SupermarketCreatePromotion | None = None
 
 
 class SupermarketDetailAddress(BaseModel):

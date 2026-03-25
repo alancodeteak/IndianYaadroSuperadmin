@@ -4,9 +4,26 @@ from app.api.deps import CurrentUser, get_shop_owner_service, require_authentica
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.domain.enums.roles import Role
+from app.api.v1.schemas.shop_owner import SupermarketCreateRequest
 from app.services.shop_owner_service import ShopOwnerService
 
 router = APIRouter(prefix="/supermarkets", tags=["supermarkets"])
+
+
+@router.post("/")
+async def create_supermarket(
+    payload: SupermarketCreateRequest,
+    current_user: CurrentUser = Depends(require_authenticated),
+    service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    if current_user.role not in {Role.SUPERADMIN, Role.PORTAL_USER}:
+        raise ApiError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="Not enough permissions",
+            status_code=403,
+        )
+    detail = service.create_supermarket(payload, current_user.role)
+    return {"data": detail, "meta": None}
 
 
 @router.get("/")

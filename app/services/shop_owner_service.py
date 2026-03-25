@@ -5,7 +5,7 @@ from typing import Any
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
-from app.api.v1.schemas.shop_owner import SupermarketListFilters
+from app.api.v1.schemas.shop_owner import SupermarketCreateRequest, SupermarketListFilters
 from app.domain.enums.roles import Role
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 
@@ -80,4 +80,15 @@ class ShopOwnerService:
             )
 
         return detail
+
+    def create_supermarket(self, payload: SupermarketCreateRequest, role: Role) -> dict[str, Any]:
+        if role not in {Role.PORTAL_USER, Role.SUPERADMIN}:
+            raise ApiError(
+                code=ErrorCode.UNAUTHORIZED,
+                message="Not enough permissions",
+                status_code=403,
+            )
+
+        self.repository.create_supermarket(payload)
+        return self.get_supermarket_detail(user_id=payload.user_id, role=role)
 

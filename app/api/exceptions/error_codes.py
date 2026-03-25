@@ -27,6 +27,7 @@ class ErrorCode:
 
     # Orders
     ORDER_NOT_FOUND = "ORDER_NOT_FOUND"
+    RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
 
     # Middleware
     RATE_LIMITED = "RATE_LIMITED"
