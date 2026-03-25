@@ -262,14 +262,14 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
 
         if _exists_user_id():
             raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
+                code=ErrorCode.CONFLICT,
                 message="A shop owner with this user_id already exists",
                 status_code=409,
                 details={"field": "user_id"},
             )
         if _exists_shop_id():
             raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
+                code=ErrorCode.CONFLICT,
                 message="A shop owner with this derived shop_id already exists",
                 status_code=409,
                 details={"field": "shop_id", "shop_id": shop_id},
@@ -304,7 +304,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
             if dup_email:
                 raise ApiError(
-                    code=ErrorCode.VALIDATION_ERROR,
+                    code=ErrorCode.CONFLICT,
                     message="email is already in use",
                     status_code=409,
                     details={"field": "email"},
@@ -324,7 +324,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
             if dup_lic:
                 raise ApiError(
-                    code=ErrorCode.VALIDATION_ERROR,
+                    code=ErrorCode.CONFLICT,
                     message="shop_license_no is already in use",
                     status_code=409,
                     details={"field": "shop_license_no"},
@@ -428,7 +428,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         except IntegrityError as exc:
             self.db.rollback()
             raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
+                code=ErrorCode.CONFLICT,
                 message="Could not create supermarket due to a data conflict",
                 status_code=409,
             ) from exc
@@ -520,7 +520,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
             if dup_email:
                 raise ApiError(
-                    code=ErrorCode.VALIDATION_ERROR,
+                    code=ErrorCode.CONFLICT,
                     message="email is already in use",
                     status_code=409,
                     details={"field": "email"},
@@ -535,7 +535,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
             if dup_lic:
                 raise ApiError(
-                    code=ErrorCode.VALIDATION_ERROR,
+                    code=ErrorCode.CONFLICT,
                     message="shop_license_no is already in use",
                     status_code=409,
                     details={"field": "shop_license_no"},
@@ -551,7 +551,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         except IntegrityError as exc:
             self.db.rollback()
             raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
+                code=ErrorCode.CONFLICT,
                 message="Could not update supermarket due to a data conflict",
                 status_code=409,
             ) from exc
