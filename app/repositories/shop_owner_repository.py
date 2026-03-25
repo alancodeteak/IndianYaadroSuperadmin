@@ -275,6 +275,28 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 details={"field": "shop_id", "shop_id": shop_id},
             )
 
+        shop_name = payload.shop_name.strip()
+        if shop_name == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="shop_name cannot be empty",
+                status_code=400,
+            )
+        password = payload.password.strip()
+        if password == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="password cannot be empty",
+                status_code=400,
+            )
+
+        if payload.email is not None:
+            if payload.email.strip() == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="email cannot be empty",
+                    status_code=400,
+                )
         if payload.email and payload.email.strip():
             email_norm = payload.email.strip()
             dup_email = self.db.scalar(
@@ -288,6 +310,13 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     details={"field": "email"},
                 )
 
+        if payload.shop_license_no is not None:
+            if payload.shop_license_no.strip() == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="shop_license_no cannot be empty",
+                    status_code=400,
+                )
         if payload.shop_license_no and payload.shop_license_no.strip():
             lic = payload.shop_license_no.strip()
             dup_lic = self.db.scalar(
@@ -302,11 +331,35 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 )
 
         addr = payload.address
+        if addr.street_address.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="street_address cannot be empty",
+                status_code=400,
+            )
+        if addr.city.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="city cannot be empty",
+                status_code=400,
+            )
+        if addr.state.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="state cannot be empty",
+                status_code=400,
+            )
+        if addr.pincode.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="pincode cannot be empty",
+                status_code=400,
+            )
         address = Address(
-            street_address=addr.street_address,
-            city=addr.city,
-            state=addr.state,
-            pincode=addr.pincode,
+            street_address=addr.street_address.strip(),
+            city=addr.city.strip(),
+            state=addr.state.strip(),
+            pincode=addr.pincode.strip(),
             latitude=addr.latitude,
             longitude=addr.longitude,
         )
@@ -316,9 +369,9 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         shop_owner = ShopOwner(
             shop_id=shop_id,
             user_id=payload.user_id,
-            shop_name=payload.shop_name,
-            password=payload.password,
-            phone=payload.phone,
+            shop_name=shop_name,
+            password=password,
+            phone=payload.phone.strip() if payload.phone and payload.phone.strip() else None,
             email=payload.email.strip() if payload.email and payload.email.strip() else None,
             shop_license_no=(
                 payload.shop_license_no.strip()
@@ -410,8 +463,17 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     status_code=500,
                 )
             for key, value in address_patch.items():
-                if value is not None:
-                    setattr(address, key, value)
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    value = value.strip()
+                    if value == "":
+                        raise ApiError(
+                            code=ErrorCode.VALIDATION_ERROR,
+                            message=f"{key} cannot be empty",
+                            status_code=400,
+                        )
+                setattr(address, key, value)
             self.db.add(address)
 
         # Normalize strings for uniqueness checks

@@ -118,10 +118,10 @@ class SupermarketListFilters(BaseModel):
 
 
 class SupermarketCreateAddress(BaseModel):
-    street_address: str = Field(max_length=250)
-    city: str = Field(max_length=100)
-    state: str = Field(max_length=100)
-    pincode: str = Field(max_length=20)
+    street_address: str = Field(min_length=1, max_length=250)
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=1, max_length=100)
+    pincode: str = Field(min_length=1, max_length=20)
     latitude: Decimal | None = None
     longitude: Decimal | None = None
 
@@ -153,8 +153,8 @@ class SupermarketCreatePromotion(BaseModel):
 
 class SupermarketCreateRequest(BaseModel):
     user_id: int = Field(gt=0)
-    shop_name: str = Field(max_length=200)
-    password: str = Field(max_length=255)
+    shop_name: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=255)
     address: SupermarketCreateAddress
     phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=100)
