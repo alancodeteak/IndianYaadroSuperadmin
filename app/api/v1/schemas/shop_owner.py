@@ -167,6 +167,30 @@ class SupermarketCreateRequest(BaseModel):
     promotion: SupermarketCreatePromotion | None = None
 
 
+class SupermarketUpdateAddress(BaseModel):
+    street_address: str | None = Field(default=None, max_length=250)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    pincode: str | None = Field(default=None, max_length=20)
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+
+
+class SupermarketUpdateRequest(BaseModel):
+    shop_name: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=20)
+    email: str | None = Field(default=None, max_length=100)
+    shop_license_no: str | None = Field(default=None, max_length=100)
+    photo: str | None = Field(default=None, max_length=255)
+    geo_coordinates: dict[str, Any] | None = None
+    upi_id: str | None = Field(default=None, max_length=100)
+    delivery_time: int | None = Field(default=None, ge=0)
+    status: ShopStatus | None = None
+    payment_status: ShopPaymentStatus | None = None
+    is_blocked: bool | None = None
+    address: SupermarketUpdateAddress | None = None
+
+
 class SupermarketDetailAddress(BaseModel):
     street_address: str
     city: str

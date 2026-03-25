@@ -3,13 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
-from app.api.v1.schemas.shop_owner import SupermarketCreateRequest, SupermarketListFilters
+from app.api.v1.schemas.shop_owner import (
+    SupermarketCreateRequest,
+    SupermarketListFilters,
+    SupermarketUpdateRequest,
+)
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 from app.infrastructure.db.models.address import Address
 from app.infrastructure.db.models.delivery_partner import DeliveryPartner
@@ -377,4 +381,146 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             ) from exc
 
         return shop_id
+
+    def update_supermarket(self, user_id: int, payload: SupermarketUpdateRequest) -> None:
+        shop_owner = self.db.scalar(
+            select(ShopOwner).where(
+                ShopOwner.user_id == user_id,
+                ShopOwner.is_supermarket.is_(True),
+                ShopOwner.is_deleted.is_(False),
+            )
+        )
+        if shop_owner is None:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Supermarket not found",
+                status_code=404,
+            )
+
+        patch = payload.model_dump(exclude_unset=True)
+
+        # Nested address update (if provided)
+        address_patch = patch.pop("address", None)
+        if address_patch is not None:
+            address = self.db.get(Address, shop_owner.address_id)
+            if address is None:
+                raise ApiError(
+                    code=ErrorCode.INTERNAL_SERVER_ERROR,
+                    message="Supermarket address is missing",
+                    status_code=500,
+                )
+            for key, value in address_patch.items():
+                if value is not None:
+                    setattr(address, key, value)
+            self.db.add(address)
+
+        # Normalize strings for uniqueness checks
+        if "email" in patch and patch["email"] is not None:
+            patch["email"] = patch["email"].strip()
+            if patch["email"] == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="email cannot be empty",
+                    status_code=400,
+                )
+        if "shop_license_no" in patch and patch["shop_license_no"] is not None:
+            patch["shop_license_no"] = patch["shop_license_no"].strip()
+            if patch["shop_license_no"] == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="shop_license_no cannot be empty",
+                    status_code=400,
+                )
+        if "phone" in patch and patch["phone"] is not None:
+            patch["phone"] = patch["phone"].strip()
+            if patch["phone"] == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="phone cannot be empty",
+                    status_code=400,
+                )
+        if "shop_name" in patch and patch["shop_name"] is not None:
+            patch["shop_name"] = patch["shop_name"].strip()
+            if patch["shop_name"] == "":
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="shop_name cannot be empty",
+                    status_code=400,
+                )
+
+        # Uniqueness checks (exclude current shop owner)
+        if "email" in patch and patch["email"] is not None:
+            dup_email = self.db.scalar(
+                select(func.count(ShopOwner.id)).where(
+                    ShopOwner.email == patch["email"],
+                    ShopOwner.user_id != user_id,
+                )
+            )
+            if dup_email:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="email is already in use",
+                    status_code=409,
+                    details={"field": "email"},
+                )
+
+        if "shop_license_no" in patch and patch["shop_license_no"] is not None:
+            dup_lic = self.db.scalar(
+                select(func.count(ShopOwner.id)).where(
+                    ShopOwner.shop_license_no == patch["shop_license_no"],
+                    ShopOwner.user_id != user_id,
+                )
+            )
+            if dup_lic:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="shop_license_no is already in use",
+                    status_code=409,
+                    details={"field": "shop_license_no"},
+                )
+
+        for key, value in patch.items():
+            if value is not None:
+                setattr(shop_owner, key, value)
+
+        self.db.add(shop_owner)
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="Could not update supermarket due to a data conflict",
+                status_code=409,
+            ) from exc
+
+    def soft_delete_supermarket(self, user_id: int) -> None:
+        shop_owner = self.db.scalar(
+            select(ShopOwner).where(
+                ShopOwner.user_id == user_id,
+                ShopOwner.is_supermarket.is_(True),
+                ShopOwner.is_deleted.is_(False),
+            )
+        )
+        if shop_owner is None:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Supermarket not found",
+                status_code=404,
+            )
+
+        shop_owner.is_deleted = True
+        self.db.add(shop_owner)
+
+        # Also soft-delete delivery partners for this shop.
+        self.db.execute(
+            update(DeliveryPartner)
+            .where(
+                DeliveryPartner.shop_id == shop_owner.shop_id,
+                DeliveryPartner.is_deleted.is_(False),
+            )
+            .values(is_deleted=True)
+        )
+
+        self.db.commit()
 

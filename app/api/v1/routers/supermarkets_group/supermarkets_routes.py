@@ -4,7 +4,7 @@ from app.api.deps import CurrentUser, get_shop_owner_service, require_authentica
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.domain.enums.roles import Role
-from app.api.v1.schemas.shop_owner import SupermarketCreateRequest
+from app.api.v1.schemas.shop_owner import SupermarketCreateRequest, SupermarketUpdateRequest
 from app.services.shop_owner_service import ShopOwnerService
 
 router = APIRouter(prefix="/supermarkets", tags=["supermarkets"])
@@ -67,4 +67,37 @@ async def get_supermarket_detail(
             status_code=403,
         )
     payload = service.get_supermarket_detail(user_id=user_id, role=current_user.role)
+    return {"data": payload, "meta": None}
+
+
+@router.patch("/{user_id}")
+async def update_supermarket(
+    user_id: int,
+    payload: SupermarketUpdateRequest,
+    current_user: CurrentUser = Depends(require_authenticated),
+    service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    if current_user.role != Role.SUPERADMIN:
+        raise ApiError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="Not enough permissions",
+            status_code=403,
+        )
+    updated = service.update_supermarket(user_id=user_id, payload=payload, role=current_user.role)
+    return {"data": updated, "meta": None}
+
+
+@router.delete("/{user_id}")
+async def delete_supermarket(
+    user_id: int,
+    current_user: CurrentUser = Depends(require_authenticated),
+    service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    if current_user.role != Role.SUPERADMIN:
+        raise ApiError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="Not enough permissions",
+            status_code=403,
+        )
+    payload = service.delete_supermarket(user_id=user_id, role=current_user.role)
     return {"data": payload, "meta": None}

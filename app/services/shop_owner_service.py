@@ -5,7 +5,11 @@ from typing import Any
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
-from app.api.v1.schemas.shop_owner import SupermarketCreateRequest, SupermarketListFilters
+from app.api.v1.schemas.shop_owner import (
+    SupermarketCreateRequest,
+    SupermarketListFilters,
+    SupermarketUpdateRequest,
+)
 from app.domain.enums.roles import Role
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 
@@ -91,4 +95,40 @@ class ShopOwnerService:
 
         self.repository.create_supermarket(payload)
         return self.get_supermarket_detail(user_id=payload.user_id, role=role)
+
+    def update_supermarket(
+        self, user_id: int, payload: SupermarketUpdateRequest, role: Role
+    ) -> dict[str, Any]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(
+                code=ErrorCode.UNAUTHORIZED,
+                message="Not enough permissions",
+                status_code=403,
+            )
+        if user_id <= 0:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="user_id must be > 0",
+                status_code=400,
+            )
+
+        self.repository.update_supermarket(user_id=user_id, payload=payload)
+        return self.get_supermarket_detail(user_id=user_id, role=role)
+
+    def delete_supermarket(self, user_id: int, role: Role) -> dict[str, Any]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(
+                code=ErrorCode.UNAUTHORIZED,
+                message="Not enough permissions",
+                status_code=403,
+            )
+        if user_id <= 0:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="user_id must be > 0",
+                status_code=400,
+            )
+
+        self.repository.soft_delete_supermarket(user_id=user_id)
+        return {"deleted": True, "user_id": user_id}
 
