@@ -1,4 +1,7 @@
+import logging
+
 from fastapi import FastAPI
+from sqlalchemy import text
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -16,16 +19,27 @@ from app.api.middlewares.security_headers import SecurityHeadersMiddleware
 from app.api.router import get_api_router
 from app.api.core.config import get_settings
 from app.api.core.logger import configure_logging
+from app.infrastructure.db.session import engine
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging()
+    logger = logging.getLogger("app.startup")
 
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
     )
+
+    # Startup DB connectivity check (non-fatal).
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connection OK")
+    except Exception as exc:
+        # Avoid logging the full URL (may include credentials).
+        logger.error("Database connection FAILED", extra={"error_type": type(exc).__name__})
 
     apply_cors(app, settings)
     allowed_hosts = [h.strip() for h in settings.ALLOWED_HOSTS.split(",") if h.strip()]
