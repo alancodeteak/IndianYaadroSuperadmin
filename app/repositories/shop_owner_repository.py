@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
+import time
 from typing import Any
 
 from sqlalchemy import String, cast, func, select, update
@@ -67,9 +69,79 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             .limit(limit)
         )
         rows = self.db.execute(stmt).all()
+        # #region agent log
+        try:
+            null_photo = sum(1 for r in rows if not r.photo)
+            sample = [int(r.user_id) for r in rows[:10]]
+            with open(
+                "/Users/alan/CodeTeak/Yaadro/backendIndianySuperadmin/.cursor/debug-a0d3b1.log",
+                "a",
+                encoding="utf-8",
+            ) as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a0d3b1",
+                            "runId": "list-supermarkets",
+                            "hypothesisId": "H_list_photo_null_vs_presign",
+                            "location": "shop_owner_repository.py:list_supermarkets:rows",
+                            "message": "List supermarkets rows summary",
+                            "data": {
+                                "rows": len(rows),
+                                "null_photo_count": null_photo,
+                                "sample_user_ids": sample,
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # #endregion agent log
+
+        def _safe_photo_url(photo: Any) -> str | None:
+            if not photo:
+                return None
+            val = str(photo)
+            if is_http_url(val):
+                return val
+            try:
+                return presigned_get_url(purpose="shop_owner", key=val)
+            except Exception:
+                # If S3 isn't configured (e.g., boto3 not installed), don't break listing.
+                # #region agent log
+                try:
+                    with open(
+                        "/Users/alan/CodeTeak/Yaadro/backendIndianySuperadmin/.cursor/debug-a0d3b1.log",
+                        "a",
+                        encoding="utf-8",
+                    ) as f:
+                        f.write(
+                            json.dumps(
+                                {
+                                    "sessionId": "a0d3b1",
+                                    "runId": "list-supermarkets",
+                                    "hypothesisId": "H_list_photo_null_vs_presign",
+                                    "location": "shop_owner_repository.py:_safe_photo_url",
+                                    "message": "Presign failed for photo key",
+                                    "data": {
+                                        "photo_key_present": bool(val),
+                                    },
+                                    "timestamp": int(time.time() * 1000),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+                # #endregion agent log
+                return None
+
         items = [
             {
                 "photo": row.photo,
+                "photo_url": _safe_photo_url(row.photo),
                 "shop_name": row.shop_name,
                 "user_id": row.user_id,
                 "phone": row.phone,
@@ -199,6 +271,17 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             .order_by(SubscriptionInvoice.created_at.desc())
         ).all()
 
+        def _safe_presigned_get(key: Any) -> str | None:
+            if not key:
+                return None
+            val = str(key)
+            if is_http_url(val):
+                return val
+            try:
+                return presigned_get_url(purpose="shop_owner", key=val)
+            except Exception:
+                return None
+
         return {
             "shop_owner": {
                 "shop_id": shop_id,
@@ -208,15 +291,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 "email": row.email,
                 "shop_license_no": row.shop_license_no,
                 "photo": row.photo,
-                "photo_url": (
-                    row.photo
-                    if (row.photo and is_http_url(str(row.photo)))
-                    else (
-                        presigned_get_url(purpose="shop_owner", key=str(row.photo))
-                        if row.photo
-                        else None
-                    )
-                ),
+                "photo_url": _safe_presigned_get(row.photo),
                 "device_token": row.device_token,
                 "status": row.status,
                 "payment_status": row.payment_status,
@@ -268,20 +343,8 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                     "promotion_header": promotion_row.promotion_header,
                     "promotion_content": promotion_row.promotion_content,
                     "promotion_image_s3_key": promotion_row.promotion_image_s3_key,
-                    "promotion_image_url": (
+                    "promotion_image_url": _safe_presigned_get(
                         promotion_row.promotion_image_s3_key
-                        if (
-                            promotion_row.promotion_image_s3_key
-                            and is_http_url(str(promotion_row.promotion_image_s3_key))
-                        )
-                        else (
-                            presigned_get_url(
-                                purpose="shop_owner",
-                                key=str(promotion_row.promotion_image_s3_key),
-                            )
-                            if promotion_row.promotion_image_s3_key
-                            else None
-                        )
                     ),
                     "is_marketing_enabled": promotion_row.is_marketing_enabled,
                 }
@@ -571,6 +634,38 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
 
         patch = payload.model_dump(exclude_unset=True)
+        # #region agent log
+        try:
+            keys = sorted(list(patch.keys()))
+            has_photo = "photo" in patch
+            photo_nonempty = bool(patch.get("photo")) if has_photo else False
+            with open(
+                "/Users/alan/CodeTeak/Yaadro/backendIndianySuperadmin/.cursor/debug-a0d3b1.log",
+                "a",
+                encoding="utf-8",
+            ) as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a0d3b1",
+                            "runId": "upload-photo",
+                            "hypothesisId": "H_photo_not_saved_vs_not_uploaded",
+                            "location": "shop_owner_repository.py:update_supermarket",
+                            "message": "Update payload keys",
+                            "data": {
+                                "user_id": int(user_id),
+                                "keys": keys,
+                                "has_photo": has_photo,
+                                "photo_nonempty": photo_nonempty,
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # #endregion agent log
 
         # Normalize enum objects to DB enum values (lowercase strings).
         if "status" in patch and patch["status"] is not None:
@@ -680,6 +775,33 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         self.db.add(shop_owner)
         try:
             self.db.commit()
+            # #region agent log
+            try:
+                with open(
+                    "/Users/alan/CodeTeak/Yaadro/backendIndianySuperadmin/.cursor/debug-a0d3b1.log",
+                    "a",
+                    encoding="utf-8",
+                ) as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "sessionId": "a0d3b1",
+                                "runId": "upload-photo",
+                                "hypothesisId": "H_photo_not_saved_vs_not_uploaded",
+                                "location": "shop_owner_repository.py:update_supermarket:commit",
+                                "message": "Update committed",
+                                "data": {
+                                    "user_id": int(user_id),
+                                    "photo_now_set": bool(getattr(shop_owner, "photo", None)),
+                                },
+                                "timestamp": int(time.time() * 1000),
+                            }
+                        )
+                        + "\n"
+                    )
+            except Exception:
+                pass
+            # #endregion agent log
         except IntegrityError as exc:
             self.db.rollback()
             raise ApiError(

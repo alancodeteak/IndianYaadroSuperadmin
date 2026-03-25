@@ -3,17 +3,25 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-import boto3
-
 from app.api.core.config import get_settings
 
 
 BucketPurpose = Literal["shop_owner", "delivery_partner", "orders", "tickets"]
 
+def _require_boto3():
+    try:
+        import boto3  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "boto3 is required for S3 features. Install dependencies (pip install -r requirements.txt)."
+        ) from exc
+    return boto3
+
 
 @lru_cache
 def _client():
     s = get_settings()
+    boto3 = _require_boto3()
     # If keys are empty, boto3 can still fall back to env/instance roles.
     kwargs = {"region_name": s.AWS_REGION or None}
     if s.AWS_ACCESS_KEY_ID and s.AWS_SECRET_ACCESS_KEY:
@@ -64,3 +72,23 @@ def presigned_put_url(*, purpose: BucketPurpose, key: str, content_type: str) ->
         },
         ExpiresIn=int(s.S3_PRESIGNED_URL_EXPIRY),
     )
+
+
+def put_object(
+    *,
+    purpose: BucketPurpose,
+    key: str,
+    body: bytes,
+    content_type: str,
+) -> None:
+    s = get_settings()
+    bucket = _bucket_for(purpose)
+    extra = {"ContentType": content_type}
+    if s.AWS_S3_KMS_KEY_ID:
+        extra.update(
+            {
+                "ServerSideEncryption": "aws:kms",
+                "SSEKMSKeyId": s.AWS_S3_KMS_KEY_ID,
+            }
+        )
+    _client().put_object(Bucket=bucket, Key=key, Body=body, **extra)
