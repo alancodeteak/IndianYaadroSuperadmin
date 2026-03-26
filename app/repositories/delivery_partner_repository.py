@@ -21,8 +21,18 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
     ) -> tuple[list[dict[str, Any]], int]:
         conditions = [DeliveryPartner.is_deleted.is_(False)]
 
+        if filters.delivery_partner_id:
+            conditions.append(
+                DeliveryPartner.delivery_partner_id == filters.delivery_partner_id.strip()
+            )
+
         if filters.shop_id:
             conditions.append(DeliveryPartner.shop_id == filters.shop_id.strip())
+
+        if filters.shop_name:
+            shop_name_norm = filters.shop_name.strip()
+            if shop_name_norm:
+                conditions.append(ShopOwner.shop_name.ilike(f"%{shop_name_norm}%"))
 
         if filters.phone:
             phone_norm = filters.phone.strip()
@@ -43,7 +53,22 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
                     ).ilike(f"%{name_norm}%")
                 )
 
-        count_stmt = select(func.count(DeliveryPartner.delivery_partner_id)).where(*conditions)
+        if filters.current_status:
+            status_norm = filters.current_status.strip()
+            if status_norm:
+                conditions.append(cast(DeliveryPartner.current_status, String) == status_norm)
+
+        if filters.online_status:
+            online_norm = filters.online_status.strip()
+            if online_norm:
+                conditions.append(cast(DeliveryPartner.online_status, String) == online_norm)
+
+        count_stmt = (
+            select(func.count(DeliveryPartner.delivery_partner_id))
+            .select_from(DeliveryPartner)
+            .join(ShopOwner, ShopOwner.shop_id == DeliveryPartner.shop_id)
+            .where(*conditions)
+        )
         total = int(self.db.scalar(count_stmt) or 0)
 
         stmt = (

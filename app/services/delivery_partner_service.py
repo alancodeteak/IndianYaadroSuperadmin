@@ -19,8 +19,12 @@ class DeliveryPartnerService:
         limit: int,
         *,
         name: str | None = None,
+        delivery_partner_id: str | None = None,
         shop_id: str | None = None,
+        shop_name: str | None = None,
         phone: str | None = None,
+        current_status: str | None = None,
+        online_status: str | None = None,
     ) -> dict[str, Any]:
         if page < 1:
             raise ApiError(
@@ -35,7 +39,15 @@ class DeliveryPartnerService:
                 status_code=400,
             )
 
-        filters = DeliveryPartnerListFilters(name=name, shop_id=shop_id, phone=phone)
+        filters = DeliveryPartnerListFilters(
+            name=name,
+            delivery_partner_id=delivery_partner_id,
+            shop_id=shop_id,
+            shop_name=shop_name,
+            phone=phone,
+            current_status=current_status,
+            online_status=online_status,
+        )
         rows, total = self.repository.list_delivery_partners(page=page, limit=limit, filters=filters)
         total_pages = ceil(total / limit) if total > 0 else 1
         return {

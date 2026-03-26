@@ -14,8 +14,12 @@ async def list_delivery_partners(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     name: str | None = Query(default=None),
+    delivery_partner_id: str | None = Query(default=None),
     shop_id: str | None = Query(default=None),
+    shop_name: str | None = Query(default=None),
     phone: str | None = Query(default=None),
+    current_status: str | None = Query(default=None),
+    online_status: str | None = Query(default=None),
     current_user: CurrentUser = Depends(require_authenticated),
     service: DeliveryPartnerService = Depends(get_delivery_partner_service),
 ) -> dict:
@@ -25,7 +29,17 @@ async def list_delivery_partners(
             message="Not enough permissions",
             status_code=403,
         )
-    payload = service.list_delivery_partners(page=page, limit=limit, name=name, shop_id=shop_id, phone=phone)
+    payload = service.list_delivery_partners(
+        page=page,
+        limit=limit,
+        name=name,
+        delivery_partner_id=delivery_partner_id,
+        shop_id=shop_id,
+        shop_name=shop_name,
+        phone=phone,
+        current_status=current_status,
+        online_status=online_status,
+    )
     return {"data": payload["data"], "meta": payload["meta"]}
 
 

@@ -91,6 +91,10 @@ class DeliveryPartnerListFilters(BaseModel):
     name: str | None = None
     shop_id: str | None = None
     phone: str | None = None
+    delivery_partner_id: str | None = None
+    shop_name: str | None = None
+    current_status: str | None = None
+    online_status: str | None = None
 
 
 class DeliveryPartnerCard(BaseModel):
