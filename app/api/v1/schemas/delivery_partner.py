@@ -140,3 +140,17 @@ class DeliveryPartnerDetail(BaseModel):
     updated_at: datetime
     is_deleted: bool
 
+
+class DeliveryPartnerBlockRequest(BaseModel):
+    blocked: bool
+
+
+class DeliveryPartnerBlockResponse(BaseModel):
+    delivery_partner_id: str
+    is_blocked: bool
+
+
+class DeliveryPartnerDeleteResponse(BaseModel):
+    delivery_partner_id: str
+    deleted: bool
+

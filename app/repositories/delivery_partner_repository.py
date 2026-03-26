@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1.schemas.delivery_partner import DeliveryPartnerListFilters
@@ -206,4 +206,34 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             "updated_at": r.updated_at,
             "is_deleted": bool(r.is_deleted),
         }
+
+    def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> bool:
+        result = self.db.execute(
+            update(DeliveryPartner)
+            .where(
+                DeliveryPartner.delivery_partner_id == delivery_partner_id,
+                DeliveryPartner.is_deleted.is_(False),
+            )
+            .values(is_blocked=bool(blocked))
+        )
+        if result.rowcount == 0:
+            self.db.rollback()
+            return False
+        self.db.commit()
+        return True
+
+    def soft_delete_delivery_partner(self, delivery_partner_id: str) -> bool:
+        result = self.db.execute(
+            update(DeliveryPartner)
+            .where(
+                DeliveryPartner.delivery_partner_id == delivery_partner_id,
+                DeliveryPartner.is_deleted.is_(False),
+            )
+            .values(is_deleted=True)
+        )
+        if result.rowcount == 0:
+            self.db.rollback()
+            return False
+        self.db.commit()
+        return True
 

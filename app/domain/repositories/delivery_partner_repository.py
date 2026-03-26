@@ -17,3 +17,13 @@ class AbstractDeliveryPartnerRepository(ABC):
     def get_delivery_partner_detail(self, delivery_partner_id: str) -> dict[str, Any] | None:
         raise NotImplementedError
 
+    @abstractmethod
+    def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> bool:
+        """Returns True if updated, False if not found (or deleted)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def soft_delete_delivery_partner(self, delivery_partner_id: str) -> bool:
+        """Returns True if deleted, False if not found (or already deleted)."""
+        raise NotImplementedError
+
