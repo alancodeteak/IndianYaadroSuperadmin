@@ -5,8 +5,17 @@ from app.api.deps.auth import (
     require_roles,
 )
 from app.api.deps.otp import get_otp_notifier, get_otp_store
-from app.api.deps.repositories import get_order_repository, get_shop_owner_repository
-from app.api.deps.services import get_auth_service, get_order_service, get_shop_owner_service
+from app.api.deps.repositories import (
+    get_delivery_partner_repository,
+    get_order_repository,
+    get_shop_owner_repository,
+)
+from app.api.deps.services import (
+    get_auth_service,
+    get_delivery_partner_service,
+    get_order_service,
+    get_shop_owner_service,
+)
 from app.api.deps.session import get_session_service
 
 __all__ = [
@@ -19,8 +28,10 @@ __all__ = [
     "get_otp_notifier",
     "get_order_repository",
     "get_shop_owner_repository",
+    "get_delivery_partner_repository",
     "get_order_service",
     "get_shop_owner_service",
+    "get_delivery_partner_service",
     "get_auth_service",
 ]
 

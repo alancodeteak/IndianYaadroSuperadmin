@@ -86,3 +86,19 @@ class DeliveryPartnerListItem(BaseModel):
     is_blocked: bool
     is_deleted: bool
 
+
+class DeliveryPartnerListFilters(BaseModel):
+    name: str | None = None
+    shop_id: str | None = None
+    phone: str | None = None
+
+
+class DeliveryPartnerCard(BaseModel):
+    delivery_partner_id: str
+    shop_id: str
+    shop_name: str | None = None
+    name: str
+    phone: str
+    photo: str | None = None
+    photo_url: str | None = None
+
