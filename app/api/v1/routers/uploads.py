@@ -1,7 +1,4 @@
 from __future__ import annotations
-
-import json
-import time
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
@@ -44,36 +41,6 @@ async def presign_upload(
     category = (payload.category or "file").strip()
     safe_name = payload.filename.strip().replace("/", "_")
     key = f"{prefix}/{current_user.user_id}/{category}/{uuid4().hex}-{safe_name}"
-
-    # #region agent log
-    try:
-        with open(
-            "/Users/alan/CodeTeak/Yaadro/backendIndianySuperadmin/.cursor/debug-a0d3b1.log",
-            "a",
-            encoding="utf-8",
-        ) as f:
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "a0d3b1",
-                        "runId": "upload-photo",
-                        "hypothesisId": "H_photo_not_saved_vs_not_uploaded",
-                        "location": "uploads.py:presign_upload",
-                        "message": "Issued presign key",
-                        "data": {
-                            "purpose": purpose,
-                            "category": category,
-                            "user_id": int(current_user.user_id),
-                            "key_prefix": "/".join(key.split("/")[:3]),
-                        },
-                        "timestamp": int(time.time() * 1000),
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-    # #endregion agent log
 
     try:
         upload_url = presigned_put_url(
