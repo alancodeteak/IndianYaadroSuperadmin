@@ -25,6 +25,7 @@ class DeliveryPartnerService:
         phone: str | None = None,
         current_status: str | None = None,
         online_status: str | None = None,
+        include_deleted: bool = True,
     ) -> dict[str, Any]:
         if page < 1:
             raise ApiError(
@@ -47,6 +48,7 @@ class DeliveryPartnerService:
             phone=phone,
             current_status=current_status,
             online_status=online_status,
+            include_deleted=bool(include_deleted),
         )
         rows, total = self.repository.list_delivery_partners(page=page, limit=limit, filters=filters)
         total_pages = ceil(total / limit) if total > 0 else 1
@@ -112,4 +114,20 @@ class DeliveryPartnerService:
                 status_code=404,
             )
         return {"delivery_partner_id": delivery_partner_id.strip(), "deleted": True}
+
+    def restore_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
+        if not delivery_partner_id or delivery_partner_id.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="delivery_partner_id cannot be empty",
+                status_code=400,
+            )
+        ok = self.repository.restore_delivery_partner(delivery_partner_id.strip())
+        if not ok:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Delivery partner not found",
+                status_code=404,
+            )
+        return {"delivery_partner_id": delivery_partner_id.strip(), "restored": True}
 

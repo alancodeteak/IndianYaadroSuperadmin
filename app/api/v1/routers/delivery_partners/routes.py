@@ -14,6 +14,7 @@ router = APIRouter(prefix="/delivery-partners", tags=["delivery-partners"])
 async def list_delivery_partners(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    include_deleted: bool = Query(default=True),
     name: str | None = Query(default=None),
     delivery_partner_id: str | None = Query(default=None),
     shop_id: str | None = Query(default=None),
@@ -33,6 +34,7 @@ async def list_delivery_partners(
     payload = service.list_delivery_partners(
         page=page,
         limit=limit,
+        include_deleted=include_deleted,
         name=name,
         delivery_partner_id=delivery_partner_id,
         shop_id=shop_id,
@@ -90,4 +92,20 @@ async def delete_delivery_partner(
             status_code=403,
         )
     result = service.delete_delivery_partner(delivery_partner_id)
+    return {"data": result, "meta": None}
+
+
+@router.patch("/{delivery_partner_id}/restore")
+async def restore_delivery_partner(
+    delivery_partner_id: str,
+    current_user: CurrentUser = Depends(require_authenticated),
+    service: DeliveryPartnerService = Depends(get_delivery_partner_service),
+) -> dict:
+    if current_user.role != Role.SUPERADMIN:
+        raise ApiError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="Not enough permissions",
+            status_code=403,
+        )
+    result = service.restore_delivery_partner(delivery_partner_id)
     return {"data": result, "meta": None}

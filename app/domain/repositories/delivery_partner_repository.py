@@ -27,3 +27,8 @@ class AbstractDeliveryPartnerRepository(ABC):
         """Returns True if deleted, False if not found (or already deleted)."""
         raise NotImplementedError
 
+    @abstractmethod
+    def restore_delivery_partner(self, delivery_partner_id: str) -> bool:
+        """Returns True if restored, False if not found (or not deleted)."""
+        raise NotImplementedError
+

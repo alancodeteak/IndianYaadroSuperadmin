@@ -19,6 +19,7 @@ class _DeliveryPartnerServiceStub:
         page: int,
         limit: int,
         *,
+        include_deleted: bool = True,
         name: str | None = None,
         delivery_partner_id: str | None = None,
         shop_id: str | None = None,
@@ -29,6 +30,7 @@ class _DeliveryPartnerServiceStub:
     ):
         assert isinstance(page, int)
         assert isinstance(limit, int)
+        assert isinstance(include_deleted, bool)
         if name is not None:
             assert name == "john"
         if delivery_partner_id is not None:
@@ -53,6 +55,7 @@ class _DeliveryPartnerServiceStub:
                     "phone": "9999999999",
                     "photo": "delivery_partners/DP001/photo.jpg",
                     "photo_url": "https://example.com/photo.jpg",
+                    "is_deleted": False,
                 }
             ],
             "meta": {
@@ -108,6 +111,7 @@ def test_delivery_partners_list_success_for_superadmin():
         "phone",
         "photo",
         "photo_url",
+        "is_deleted",
     }
 
     app.dependency_overrides = {}

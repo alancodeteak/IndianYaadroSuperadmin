@@ -19,7 +19,9 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
     def list_delivery_partners(
         self, page: int, limit: int, filters: DeliveryPartnerListFilters
     ) -> tuple[list[dict[str, Any]], int]:
-        conditions = [DeliveryPartner.is_deleted.is_(False)]
+        conditions = []
+        if not bool(getattr(filters, "include_deleted", False)):
+            conditions.append(DeliveryPartner.is_deleted.is_(False))
 
         if filters.delivery_partner_id:
             conditions.append(
@@ -80,6 +82,7 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
                 DeliveryPartner.last_name,
                 DeliveryPartner.phone1,
                 DeliveryPartner.photo,
+                DeliveryPartner.is_deleted,
                 DeliveryPartner.created_at,
             )
             .join(ShopOwner, ShopOwner.shop_id == DeliveryPartner.shop_id)
@@ -113,6 +116,7 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
                     "phone": str(r.phone1),
                     "photo": r.photo,
                     "photo_url": _safe_photo_url(r.photo),
+                    "is_deleted": bool(r.is_deleted),
                 }
             )
 
@@ -230,6 +234,21 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
                 DeliveryPartner.is_deleted.is_(False),
             )
             .values(is_deleted=True)
+        )
+        if result.rowcount == 0:
+            self.db.rollback()
+            return False
+        self.db.commit()
+        return True
+
+    def restore_delivery_partner(self, delivery_partner_id: str) -> bool:
+        result = self.db.execute(
+            update(DeliveryPartner)
+            .where(
+                DeliveryPartner.delivery_partner_id == delivery_partner_id,
+                DeliveryPartner.is_deleted.is_(True),
+            )
+            .values(is_deleted=False)
         )
         if result.rowcount == 0:
             self.db.rollback()

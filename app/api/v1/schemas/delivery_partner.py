@@ -95,6 +95,7 @@ class DeliveryPartnerListFilters(BaseModel):
     shop_name: str | None = None
     current_status: str | None = None
     online_status: str | None = None
+    include_deleted: bool = True
 
 
 class DeliveryPartnerCard(BaseModel):
@@ -105,6 +106,7 @@ class DeliveryPartnerCard(BaseModel):
     phone: str
     photo: str | None = None
     photo_url: str | None = None
+    is_deleted: bool = False
 
 
 class DeliveryPartnerDetail(BaseModel):
@@ -153,4 +155,9 @@ class DeliveryPartnerBlockResponse(BaseModel):
 class DeliveryPartnerDeleteResponse(BaseModel):
     delivery_partner_id: str
     deleted: bool
+
+
+class DeliveryPartnerRestoreResponse(BaseModel):
+    delivery_partner_id: str
+    restored: bool
 
