@@ -48,3 +48,21 @@ class DeliveryPartnerService:
             },
         }
 
+    def get_delivery_partner_detail(self, delivery_partner_id: str) -> dict[str, Any]:
+        if not delivery_partner_id or delivery_partner_id.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="delivery_partner_id cannot be empty",
+                status_code=400,
+            )
+        detail = self.repository.get_delivery_partner_detail(
+            delivery_partner_id=delivery_partner_id.strip()
+        )
+        if detail is None:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Delivery partner not found",
+                status_code=404,
+            )
+        return detail
+

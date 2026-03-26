@@ -8,6 +8,7 @@ from app.services.delivery_partner_service import DeliveryPartnerService
 
 router = APIRouter(prefix="/delivery-partners", tags=["delivery-partners"])
 
+
 @router.get("/")
 async def list_delivery_partners(
     page: int = Query(default=1, ge=1),
@@ -26,3 +27,19 @@ async def list_delivery_partners(
         )
     payload = service.list_delivery_partners(page=page, limit=limit, name=name, shop_id=shop_id, phone=phone)
     return {"data": payload["data"], "meta": payload["meta"]}
+
+
+@router.get("/{delivery_partner_id}")
+async def get_delivery_partner_detail(
+    delivery_partner_id: str,
+    current_user: CurrentUser = Depends(require_authenticated),
+    service: DeliveryPartnerService = Depends(get_delivery_partner_service),
+) -> dict:
+    if current_user.role != Role.SUPERADMIN:
+        raise ApiError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="Not enough permissions",
+            status_code=403,
+        )
+    detail = service.get_delivery_partner_detail(delivery_partner_id=delivery_partner_id)
+    return {"data": detail, "meta": None}

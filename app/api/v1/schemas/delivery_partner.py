@@ -102,3 +102,37 @@ class DeliveryPartnerCard(BaseModel):
     photo: str | None = None
     photo_url: str | None = None
 
+
+class DeliveryPartnerDetail(BaseModel):
+    delivery_partner_id: str
+    shop_id: str
+    shop_name: str | None = None
+    first_name: str
+    last_name: str | None = None
+    license_no: str
+    license_image: str
+    govt_id_image: str | None = None
+    join_date: datetime
+    is_blocked: bool
+    current_status: str
+    order_count: int
+    age: int
+    phone1: str
+    phone2: str | None = None
+    email: str | None = None
+    online_status: str
+    rating: Decimal | None = None
+    photo: str
+    photo_url: str | None = None
+    device_token: str | None = None
+    device_id: str | None = None
+    last_login: datetime | None = None
+    last_order: datetime | None = None
+    vehicle_detail: str | None = None
+    total_bonus: int
+    total_penalty: int
+    liquid_cash: Decimal
+    created_at: datetime
+    updated_at: datetime
+    is_deleted: bool
+

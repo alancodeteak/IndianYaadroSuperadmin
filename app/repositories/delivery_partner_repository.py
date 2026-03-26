@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.schemas.delivery_partner import DeliveryPartnerListFilters
@@ -92,4 +92,93 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             )
 
         return items, total
+
+    def get_delivery_partner_detail(self, delivery_partner_id: str) -> dict[str, Any] | None:
+        stmt = (
+            select(
+                DeliveryPartner.delivery_partner_id,
+                DeliveryPartner.shop_id,
+                ShopOwner.shop_name,
+                DeliveryPartner.first_name,
+                DeliveryPartner.last_name,
+                DeliveryPartner.license_no,
+                DeliveryPartner.license_image,
+                DeliveryPartner.govt_id_image,
+                DeliveryPartner.join_date,
+                DeliveryPartner.is_blocked,
+                cast(DeliveryPartner.current_status, String).label("current_status"),
+                DeliveryPartner.order_count,
+                DeliveryPartner.age,
+                DeliveryPartner.phone1,
+                DeliveryPartner.phone2,
+                DeliveryPartner.email,
+                cast(DeliveryPartner.online_status, String).label("online_status"),
+                DeliveryPartner.rating,
+                DeliveryPartner.photo,
+                DeliveryPartner.device_token,
+                DeliveryPartner.device_id,
+                DeliveryPartner.last_login,
+                DeliveryPartner.last_order,
+                DeliveryPartner.vehicle_detail,
+                DeliveryPartner.total_bonus,
+                DeliveryPartner.total_penalty,
+                DeliveryPartner.liquid_cash,
+                DeliveryPartner.created_at,
+                DeliveryPartner.updated_at,
+                DeliveryPartner.is_deleted,
+            )
+            .join(ShopOwner, ShopOwner.shop_id == DeliveryPartner.shop_id)
+            .where(
+                DeliveryPartner.delivery_partner_id == delivery_partner_id,
+                DeliveryPartner.is_deleted.is_(False),
+            )
+        )
+        r = self.db.execute(stmt).first()
+        if r is None:
+            return None
+
+        def _safe_photo_url(photo: Any) -> str | None:
+            if not photo:
+                return None
+            val = str(photo)
+            if is_http_url(val):
+                return val
+            try:
+                return presigned_get_url(purpose="delivery_partner", key=val)
+            except Exception:
+                return None
+
+        return {
+            "delivery_partner_id": r.delivery_partner_id,
+            "shop_id": r.shop_id,
+            "shop_name": r.shop_name,
+            "first_name": r.first_name,
+            "last_name": r.last_name,
+            "license_no": r.license_no,
+            "license_image": r.license_image,
+            "govt_id_image": r.govt_id_image,
+            "join_date": r.join_date,
+            "is_blocked": bool(r.is_blocked),
+            "current_status": r.current_status,
+            "order_count": int(r.order_count),
+            "age": int(r.age),
+            "phone1": str(r.phone1),
+            "phone2": str(r.phone2) if r.phone2 is not None else None,
+            "email": r.email,
+            "online_status": r.online_status,
+            "rating": r.rating,
+            "photo": r.photo,
+            "photo_url": _safe_photo_url(r.photo),
+            "device_token": r.device_token,
+            "device_id": r.device_id,
+            "last_login": r.last_login,
+            "last_order": r.last_order,
+            "vehicle_detail": r.vehicle_detail,
+            "total_bonus": int(r.total_bonus),
+            "total_penalty": int(r.total_penalty),
+            "liquid_cash": r.liquid_cash,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+            "is_deleted": bool(r.is_deleted),
+        }
 

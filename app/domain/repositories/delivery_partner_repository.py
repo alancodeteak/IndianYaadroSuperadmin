@@ -13,3 +13,7 @@ class AbstractDeliveryPartnerRepository(ABC):
     ) -> tuple[list[dict[str, Any]], int]:
         raise NotImplementedError
 
+    @abstractmethod
+    def get_delivery_partner_detail(self, delivery_partner_id: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
