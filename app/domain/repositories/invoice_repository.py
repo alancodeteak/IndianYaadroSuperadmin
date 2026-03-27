@@ -65,3 +65,17 @@ class AbstractInvoiceRepository(ABC):
     def list_pending_invoices(self) -> list[SubscriptionInvoice]:
         raise NotImplementedError
 
+    @abstractmethod
+    def list_issued_invoices_for_current_month(self) -> list[SubscriptionInvoice]:
+        """ISSUED invoices for current billing month (document_type=INVOICE)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_accounts_overview(
+        self,
+        *,
+        days: int,
+        shop_id: str | None = None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+

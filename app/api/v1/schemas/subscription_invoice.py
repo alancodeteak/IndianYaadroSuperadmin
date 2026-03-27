@@ -67,5 +67,7 @@ class SubscriptionInvoiceListItem(BaseModel):
     billing_period_start: datetime
     billing_period_end: datetime
     amount: Decimal
+    document_type: InvoiceDocumentType
     status: InvoiceStatus
+    paid_at: datetime | None = None
 

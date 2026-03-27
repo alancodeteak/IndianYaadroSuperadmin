@@ -3,6 +3,7 @@ from fastapi import Depends
 from app.api.core.config import get_settings
 from app.api.deps.otp import get_otp_notifier, get_otp_store
 from app.api.deps.repositories import (
+    get_daily_activity_repository,
     get_delivery_partner_repository,
     get_invoice_repository,
     get_order_repository,
@@ -10,10 +11,12 @@ from app.api.deps.repositories import (
 )
 from app.api.deps.session import get_session_service
 from app.repositories.delivery_partner_repository import DeliveryPartnerRepository
+from app.repositories.daily_activity_repository import DailyActivityRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.shop_owner_repository import ShopOwnerRepository
 from app.services.auth_service import AuthService
+from app.services.daily_activity_service import DailyActivityService
 from app.services.invoice_service import InvoiceService
 from app.services.order_service import OrderService
 from app.services.delivery_partner_service import DeliveryPartnerService
@@ -40,6 +43,12 @@ def get_invoice_service(
     repo: InvoiceRepository = Depends(get_invoice_repository),
 ) -> InvoiceService:
     return InvoiceService(repository=repo)
+
+
+def get_daily_activity_service(
+    repo: DailyActivityRepository = Depends(get_daily_activity_repository),
+) -> DailyActivityService:
+    return DailyActivityService(repository=repo)
 
 
 def get_auth_service() -> AuthService:

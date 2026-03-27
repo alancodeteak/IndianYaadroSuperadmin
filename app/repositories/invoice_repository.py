@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.schemas.subscription_invoice import SubscriptionInvoiceCreate, SubscriptionInvoiceUpdate
@@ -140,4 +142,115 @@ class InvoiceRepository(AbstractInvoiceRepository):
             SubscriptionInvoice.status == InvoiceStatus.PENDING,
         )
         return list(self.db.scalars(stmt).all())
+
+    def list_issued_invoices_for_current_month(self) -> list[SubscriptionInvoice]:
+        now = datetime.now(timezone.utc)
+        month_start = datetime(year=now.year, month=now.month, day=1, tzinfo=timezone.utc)
+        next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+        stmt = select(SubscriptionInvoice).where(
+            SubscriptionInvoice.document_type == InvoiceDocumentType.INVOICE,
+            SubscriptionInvoice.status == InvoiceStatus.ISSUED,
+            SubscriptionInvoice.billing_period_start >= month_start,
+            SubscriptionInvoice.billing_period_start < next_month_start,
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_accounts_overview(self, *, days: int, shop_id: str | None = None) -> dict[str, Any]:
+        days = max(1, min(int(days), 365))
+        now = datetime.now(timezone.utc)
+        since = now - timedelta(days=days)
+
+        base_conditions: list[Any] = [SubscriptionInvoice.document_type == InvoiceDocumentType.INVOICE]
+        if shop_id:
+            base_conditions.append(SubscriptionInvoice.shop_id == shop_id)
+
+        # Collected = PAID invoices amount (within range)
+        collected_stmt = select(func.coalesce(func.sum(SubscriptionInvoice.amount), 0)).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status == InvoiceStatus.PAID,
+            SubscriptionInvoice.paid_at.is_not(None),
+            SubscriptionInvoice.paid_at >= since,
+        )
+        collected_amount = float(self.db.scalar(collected_stmt) or 0)
+
+        # To-collect = pending + overdue invoice amounts (regardless of range)
+        to_collect_stmt = select(func.coalesce(func.sum(SubscriptionInvoice.amount), 0)).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status.in_([InvoiceStatus.PENDING, InvoiceStatus.OVERDUE]),
+        )
+        to_collect_amount = float(self.db.scalar(to_collect_stmt) or 0)
+
+        overdue_shops_stmt = select(func.count(distinct(SubscriptionInvoice.shop_id))).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status == InvoiceStatus.OVERDUE,
+        )
+        pending_shops_stmt = select(func.count(distinct(SubscriptionInvoice.shop_id))).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status == InvoiceStatus.PENDING,
+        )
+
+        overdue_invoices_stmt = select(func.count(SubscriptionInvoice.invoice_id)).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status == InvoiceStatus.OVERDUE,
+        )
+        pending_invoices_stmt = select(func.count(SubscriptionInvoice.invoice_id)).where(
+            and_(*base_conditions),
+            SubscriptionInvoice.status == InvoiceStatus.PENDING,
+        )
+
+        overdue_shops = int(self.db.scalar(overdue_shops_stmt) or 0)
+        pending_shops = int(self.db.scalar(pending_shops_stmt) or 0)
+        overdue_invoices = int(self.db.scalar(overdue_invoices_stmt) or 0)
+        pending_invoices = int(self.db.scalar(pending_invoices_stmt) or 0)
+
+        daily_collected_stmt = (
+            select(
+                func.date(SubscriptionInvoice.paid_at).label("date"),
+                func.coalesce(func.sum(SubscriptionInvoice.amount), 0).label("amount"),
+            )
+            .where(
+                and_(*base_conditions),
+                SubscriptionInvoice.status == InvoiceStatus.PAID,
+                SubscriptionInvoice.paid_at.is_not(None),
+                SubscriptionInvoice.paid_at >= since,
+            )
+            .group_by(func.date(SubscriptionInvoice.paid_at))
+            .order_by(func.date(SubscriptionInvoice.paid_at))
+        )
+        daily_rows = self.db.execute(daily_collected_stmt).all()
+        daily_collected = [{"date": str(r.date), "amount": float(r.amount or 0)} for r in daily_rows]
+
+        top_overdue_stmt = (
+            select(
+                SubscriptionInvoice.shop_id.label("shop_id"),
+                func.coalesce(func.sum(SubscriptionInvoice.amount), 0).label("amount"),
+                func.count(SubscriptionInvoice.invoice_id).label("count"),
+            )
+            .where(and_(*base_conditions), SubscriptionInvoice.status == InvoiceStatus.OVERDUE)
+            .group_by(SubscriptionInvoice.shop_id)
+            .order_by(func.coalesce(func.sum(SubscriptionInvoice.amount), 0).desc())
+            .limit(10)
+        )
+        top_rows = self.db.execute(top_overdue_stmt).all()
+        top_overdue_shops = [
+            {"shop_id": str(r.shop_id), "amount": float(r.amount or 0), "count": int(r.count or 0)} for r in top_rows
+        ]
+
+        return {
+            "window_days": days,
+            "kpis": {
+                "collected_amount": collected_amount,
+                "to_collect_amount": to_collect_amount,
+                "overdue_shops": overdue_shops,
+                "pending_shops": pending_shops,
+                "overdue_invoices": overdue_invoices,
+                "pending_invoices": pending_invoices,
+            },
+            "series": {
+                "daily_collected": daily_collected,
+            },
+            "lists": {
+                "top_overdue_shops": top_overdue_shops,
+            },
+        }
 

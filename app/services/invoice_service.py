@@ -335,8 +335,20 @@ class InvoiceService:
         return {"generated": generated, "skipped": skipped}
 
     def run_overdue_automation(self) -> dict[str, int]:
-        transitioned = 0
+        transitioned_to_pending = 0
+        transitioned_to_overdue = 0
         now = datetime.now(timezone.utc)
+
+        # Rule: After the 5th of each month, any unpaid ISSUED invoices become PENDING.
+        # (We treat "unpaid" here as: status still ISSUED, document_type INVOICE.)
+        if now.day > 5:
+            for invoice in self.repository.list_issued_invoices_for_current_month():
+                self.repository.update_invoice(
+                    invoice,
+                    SubscriptionInvoiceUpdate(status=InvoiceStatus.PENDING),
+                )
+                transitioned_to_pending += 1
+
         for invoice in self.repository.list_pending_invoices():
             next_invoice_date = (invoice.billing_period_start + timedelta(days=32)).replace(day=1)
             overdue_trigger = next_invoice_date - timedelta(days=5)
@@ -345,8 +357,11 @@ class InvoiceService:
                     invoice,
                     SubscriptionInvoiceUpdate(status=InvoiceStatus.OVERDUE),
                 )
-                transitioned += 1
-        return {"transitioned_to_overdue": transitioned}
+                transitioned_to_overdue += 1
+        return {
+            "transitioned_to_pending": transitioned_to_pending,
+            "transitioned_to_overdue": transitioned_to_overdue,
+        }
 
     def retry_bill_generation(self, invoice_id: int) -> SubscriptionInvoiceRead:
         return self.generate_bill_for_invoice(invoice_id)
@@ -403,6 +418,11 @@ class InvoiceService:
             self.repository.create_invoice(payload)
             imported += 1
         return {"imported": imported, "skipped": skipped}
+
+    def get_accounts_overview(self, *, days: int, shop_id: str | None = None) -> dict[str, Any]:
+        if days < 1 or days > 365:
+            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="days must be between 1 and 365", status_code=400)
+        return self.repository.get_accounts_overview(days=days, shop_id=shop_id)
 
     def _ensure_valid_transition(self, current: InvoiceStatus, new: InvoiceStatus) -> None:
         if current == new:

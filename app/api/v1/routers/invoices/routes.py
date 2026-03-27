@@ -28,6 +28,17 @@ class LegacyImportPayload(BaseModel):
     rows: list[dict[str, Any]]
 
 
+@router.get("/overview", response_model=dict[str, Any])
+async def accounts_overview_admin(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
+    service: InvoiceService = Depends(get_invoice_service),
+) -> dict[str, Any]:
+    del current_user
+    data = service.get_accounts_overview(days=days)
+    return {"data": data, "meta": None}
+
+
 @router.get(
     "",
     response_model=dict[str, Any],
@@ -283,14 +294,46 @@ portal_router = APIRouter(prefix="/api/v1/portal/invoices", tags=["portal-invoic
 async def list_invoices_portal(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=200),
+    status: InvoiceStatus | None = None,
+    document_type: InvoiceDocumentType | None = None,
+    subscription_id: int | None = None,
+    billing_period_start: datetime | None = None,
+    billing_period_end: datetime | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    search: str | None = None,
+    sort: str | None = Query(default="-billing_period_start"),
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
 ) -> dict[str, Any]:
+    filters: dict[str, Any] = {
+        "shop_id": current_user.user_id,
+        "status": status,
+        "document_type": document_type,
+        "subscription_id": subscription_id,
+        "billing_period_start": billing_period_start,
+        "billing_period_end": billing_period_end,
+        "created_from": created_from,
+        "created_to": created_to,
+        "search": search,
+    }
+    order_by: list[tuple[str, str]] = []
+    if sort:
+        for part in sort.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            direction = "asc"
+            field = part
+            if part.startswith("-"):
+                direction = "desc"
+                field = part[1:]
+            order_by.append((field, direction))
     items, total = service.list_invoices(
         page=page,
         limit=limit,
-        filters={"shop_id": current_user.user_id},
-        order_by=[("billing_period_start", "desc")],
+        filters=filters,
+        order_by=order_by or [("billing_period_start", "desc")],
     )
     return {"data": [i.model_dump() for i in items], "meta": {"page": page, "limit": limit, "total": total}}
 
@@ -324,6 +367,16 @@ async def download_invoice_portal(
         },
         "meta": None,
     }
+
+
+@portal_router.get("/overview", response_model=dict[str, Any])
+async def accounts_overview_portal(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
+    service: InvoiceService = Depends(get_invoice_service),
+) -> dict[str, Any]:
+    data = service.get_accounts_overview(days=days, shop_id=current_user.user_id)
+    return {"data": data, "meta": None}
 
 
 @portal_router.post("/create-manual", response_model=dict[str, Any])
