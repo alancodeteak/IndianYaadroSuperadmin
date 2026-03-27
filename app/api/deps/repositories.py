@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.db.session import get_db_session
 from app.repositories.delivery_partner_repository import DeliveryPartnerRepository
+from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.shop_owner_repository import ShopOwnerRepository
 
@@ -19,4 +20,8 @@ def get_delivery_partner_repository(
     db: Session = Depends(get_db_session),
 ) -> DeliveryPartnerRepository:
     return DeliveryPartnerRepository(db=db)
+
+
+def get_invoice_repository(db: Session = Depends(get_db_session)) -> InvoiceRepository:
+    return InvoiceRepository(db=db)
 
