@@ -486,6 +486,268 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             daily[key]["total_amount"] += row.amount
         return list(daily.values())
 
+    def get_reports_overview(self, days: int) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        current_start = now - timedelta(days=days - 1)
+        previous_start = current_start - timedelta(days=days)
+
+        current = self.db.execute(
+            select(
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+                func.sum(case((cast(Order.order_status, String) == "Delivered", 1), else_=0)).label(
+                    "delivered"
+                ),
+                func.sum(case((cast(Order.order_status, String) == "cancelled", 1), else_=0)).label(
+                    "cancelled"
+                ),
+            ).where(
+                Order.is_deleted.is_(False),
+                Order.created_at >= current_start,
+                Order.created_at <= now,
+            )
+        ).first()
+        previous = self.db.execute(
+            select(
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+            ).where(
+                Order.is_deleted.is_(False),
+                Order.created_at >= previous_start,
+                Order.created_at < current_start,
+            )
+        ).first()
+
+        active_shops = int(
+            self.db.scalar(
+                select(func.count(ShopOwner.id)).where(
+                    ShopOwner.is_supermarket.is_(True),
+                    ShopOwner.is_deleted.is_(False),
+                )
+            )
+            or 0
+        )
+        active_partners = int(
+            self.db.scalar(
+                select(func.count(DeliveryPartner.id)).where(DeliveryPartner.is_deleted.is_(False))
+            )
+            or 0
+        )
+
+        trend_rows = self.db.execute(
+            select(
+                func.date(Order.created_at).label("day"),
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+            )
+            .where(
+                Order.is_deleted.is_(False),
+                Order.created_at >= current_start,
+                Order.created_at <= now,
+            )
+            .group_by(func.date(Order.created_at))
+            .order_by(func.date(Order.created_at).asc())
+        ).all()
+
+        heatmap_rows = self.db.execute(
+            select(
+                func.extract("dow", Order.created_at).label("dow"),
+                func.extract("hour", Order.created_at).label("hour"),
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+            )
+            .where(
+                Order.is_deleted.is_(False),
+                Order.created_at >= current_start,
+                Order.created_at <= now,
+            )
+            .group_by(
+                func.extract("dow", Order.created_at),
+                func.extract("hour", Order.created_at),
+            )
+            .order_by(
+                func.extract("dow", Order.created_at).asc(),
+                func.extract("hour", Order.created_at).asc(),
+            )
+        ).all()
+
+        shop_revenue_rows = self.db.execute(
+            select(
+                ShopOwner.shop_id,
+                ShopOwner.shop_name,
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+                func.count(Order.order_id).label("orders"),
+            )
+            .join(Order, Order.shop_id == ShopOwner.shop_id)
+            .where(
+                ShopOwner.is_supermarket.is_(True),
+                ShopOwner.is_deleted.is_(False),
+                Order.is_deleted.is_(False),
+                Order.created_at >= current_start,
+                Order.created_at <= now,
+            )
+            .group_by(ShopOwner.shop_id, ShopOwner.shop_name)
+            .order_by(func.coalesce(func.sum(Order.total_amount), 0).desc())
+        ).all()
+
+        current_orders = int(current.orders or 0) if current else 0
+        current_amount = float(current.amount or 0) if current else 0.0
+        prev_orders = int(previous.orders or 0) if previous else 0
+        prev_amount = float(previous.amount or 0) if previous else 0.0
+
+        def _pct(cur: float, prev: float) -> float | None:
+            if prev <= 0:
+                return None
+            return round(((cur - prev) / prev) * 100, 2)
+
+        return {
+            "kpis": {
+                "total_orders": current_orders,
+                "total_deliveries": int(current.delivered or 0) if current else 0,
+                "total_amount": round(current_amount, 2),
+                "delivered_rate": round((int(current.delivered or 0) / current_orders) * 100, 2)
+                if current and current_orders > 0
+                else 0.0,
+                "cancelled_rate": round((int(current.cancelled or 0) / current_orders) * 100, 2)
+                if current and current_orders > 0
+                else 0.0,
+                "active_shops": active_shops,
+                "active_partners": active_partners,
+            },
+            "growth": {
+                "orders_pct_vs_prev_period": _pct(float(current_orders), float(prev_orders)),
+                "amount_pct_vs_prev_period": _pct(current_amount, prev_amount),
+            },
+            "series": [
+                {"date": str(r.day), "orders": int(r.orders or 0), "amount": round(float(r.amount or 0), 2)}
+                for r in trend_rows
+            ],
+            "order_time_heatmap": [
+                {
+                    "day_of_week": int(r.dow),
+                    "hour_of_day": int(r.hour),
+                    "orders": int(r.orders or 0),
+                    "amount": round(float(r.amount or 0), 2),
+                }
+                for r in heatmap_rows
+            ],
+            "revenue": {
+                "total_revenue_all_shops": round(current_amount, 2),
+                "per_shop": [
+                    {
+                        "shop_id": r.shop_id,
+                        "shop_name": r.shop_name,
+                        "orders": int(r.orders or 0),
+                        "revenue": round(float(r.amount or 0), 2),
+                    }
+                    for r in shop_revenue_rows
+                ],
+            },
+        }
+
+    def get_reports_shops(self, days: int, limit: int) -> list[dict[str, Any]]:
+        start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+        rows = self.db.execute(
+            select(
+                ShopOwner.shop_id,
+                ShopOwner.shop_name,
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+                func.sum(case((cast(Order.order_status, String) == "Delivered", 1), else_=0)).label(
+                    "delivered"
+                ),
+                func.sum(case((cast(Order.order_status, String) == "cancelled", 1), else_=0)).label(
+                    "cancelled"
+                ),
+            )
+            .join(Order, Order.shop_id == ShopOwner.shop_id)
+            .where(
+                ShopOwner.is_supermarket.is_(True),
+                ShopOwner.is_deleted.is_(False),
+                Order.is_deleted.is_(False),
+                Order.created_at >= start,
+            )
+            .group_by(ShopOwner.shop_id, ShopOwner.shop_name)
+            .order_by(func.count(Order.order_id).desc())
+            .limit(limit)
+        ).all()
+        payload: list[dict[str, Any]] = []
+        for r in rows:
+            orders = int(r.orders or 0)
+            payload.append(
+                {
+                    "shop_id": r.shop_id,
+                    "shop_name": r.shop_name,
+                    "orders": orders,
+                    "amount": round(float(r.amount or 0), 2),
+                    "delivered_rate": round((int(r.delivered or 0) / orders) * 100, 2) if orders > 0 else 0.0,
+                    "cancelled_rate": round((int(r.cancelled or 0) / orders) * 100, 2) if orders > 0 else 0.0,
+                }
+            )
+        return payload
+
+    def get_reports_funnel(self, days: int) -> dict[str, Any]:
+        start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+        row = self.db.execute(
+            select(
+                func.sum(case((cast(Order.order_status, String) == "Pending", 1), else_=0)).label("pending"),
+                func.sum(case((cast(Order.order_status, String) == "Assigned", 1), else_=0)).label("assigned"),
+                func.sum(case((cast(Order.order_status, String) == "Picked Up", 1), else_=0)).label("picked_up"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Out for Delivery", 1), else_=0)
+                ).label("out_for_delivery"),
+                func.sum(case((cast(Order.order_status, String) == "Delivered", 1), else_=0)).label(
+                    "delivered"
+                ),
+                func.sum(case((cast(Order.order_status, String) == "cancelled", 1), else_=0)).label(
+                    "cancelled"
+                ),
+            ).where(Order.is_deleted.is_(False), Order.created_at >= start)
+        ).first()
+        return {
+            "pending": int(row.pending or 0),
+            "assigned": int(row.assigned or 0),
+            "picked_up": int(row.picked_up or 0),
+            "out_for_delivery": int(row.out_for_delivery or 0),
+            "delivered": int(row.delivered or 0),
+            "cancelled": int(row.cancelled or 0),
+        }
+
+    def get_reports_finance(self, days: int) -> dict[str, Any]:
+        start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+        trend = self.db.execute(
+            select(
+                func.date(Order.created_at).label("day"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+                func.coalesce(func.sum(Order.delivery_charge), 0).label("delivery_charge"),
+            )
+            .where(Order.is_deleted.is_(False), Order.created_at >= start)
+            .group_by(func.date(Order.created_at))
+            .order_by(func.date(Order.created_at).asc())
+        ).all()
+        payments = self.db.execute(
+            select(
+                cast(Order.payment_mode, String).label("payment_mode"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("amount"),
+            )
+            .where(Order.is_deleted.is_(False), Order.created_at >= start)
+            .group_by(cast(Order.payment_mode, String))
+        ).all()
+        return {
+            "trend": [
+                {
+                    "date": str(r.day),
+                    "amount": round(float(r.amount or 0), 2),
+                    "delivery_charge": round(float(r.delivery_charge or 0), 2),
+                }
+                for r in trend
+            ],
+            "payment_split": [
+                {"payment_mode": str(r.payment_mode), "amount": round(float(r.amount or 0), 2)}
+                for r in payments
+            ],
+        }
+
     def create_supermarket(self, payload: SupermarketCreateRequest) -> str:
         shop_id = f"SHOP{payload.user_id}"
         if len(shop_id) > 50:

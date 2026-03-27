@@ -52,3 +52,57 @@ async def get_delivery_partner_activity(
         )
     payload = service.get_delivery_partner_activity(delivery_partner_id=delivery_partner_id, days=days)
     return {"data": payload, "meta": None}
+
+
+@router.get("/reports/overview")
+async def reports_overview(
+    days: int = Query(default=30, ge=1, le=90),
+    current_user: CurrentUser = Depends(require_authenticated),
+    shop_service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    payload = shop_service.get_reports_overview(role=current_user.role, days=days)
+    return {"data": payload, "meta": {"days": days}}
+
+
+@router.get("/reports/shops")
+async def reports_shops(
+    days: int = Query(default=30, ge=1, le=90),
+    limit: int = Query(default=10, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_authenticated),
+    shop_service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    payload = shop_service.get_reports_shops(role=current_user.role, days=days, limit=limit)
+    return {"data": payload, "meta": {"days": days, "limit": limit}}
+
+
+@router.get("/reports/delivery-partners")
+async def reports_delivery_partners(
+    days: int = Query(default=30, ge=1, le=90),
+    limit: int = Query(default=10, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_authenticated),
+    partner_service: DeliveryPartnerService = Depends(get_delivery_partner_service),
+) -> dict:
+    if current_user.role != Role.SUPERADMIN:
+        raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+    payload = partner_service.get_reports_delivery_partners(days=days, limit=limit)
+    return {"data": payload, "meta": {"days": days, "limit": limit}}
+
+
+@router.get("/reports/funnel")
+async def reports_funnel(
+    days: int = Query(default=30, ge=1, le=90),
+    current_user: CurrentUser = Depends(require_authenticated),
+    shop_service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    payload = shop_service.get_reports_funnel(role=current_user.role, days=days)
+    return {"data": payload, "meta": {"days": days}}
+
+
+@router.get("/reports/finance")
+async def reports_finance(
+    days: int = Query(default=30, ge=1, le=90),
+    current_user: CurrentUser = Depends(require_authenticated),
+    shop_service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict:
+    payload = shop_service.get_reports_finance(role=current_user.role, days=days)
+    return {"data": payload, "meta": {"days": days}}

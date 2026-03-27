@@ -22,6 +22,10 @@ class AbstractDeliveryPartnerRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_reports_delivery_partners(self, days: int, limit: int) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> bool:
         """Returns True if updated, False if not found (or deleted)."""
         raise NotImplementedError

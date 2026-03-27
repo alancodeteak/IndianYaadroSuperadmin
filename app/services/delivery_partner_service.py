@@ -105,6 +105,21 @@ class DeliveryPartnerService:
             )
         return detail
 
+    def get_reports_delivery_partners(self, days: int, limit: int) -> list[dict[str, Any]]:
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        if limit < 1 or limit > 100:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="limit must be between 1 and 100",
+                status_code=400,
+            )
+        return self.repository.get_reports_delivery_partners(days=days, limit=limit)
+
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> dict[str, Any]:
         if not delivery_partner_id or delivery_partner_id.strip() == "":
             raise ApiError(

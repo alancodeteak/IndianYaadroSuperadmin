@@ -354,6 +354,55 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             },
         }
 
+    def get_reports_delivery_partners(self, days: int, limit: int) -> list[dict[str, Any]]:
+        start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+        rows = self.db.execute(
+            select(
+                DeliveryPartner.delivery_partner_id,
+                DeliveryPartner.first_name,
+                DeliveryPartner.last_name,
+                func.count(Order.order_id).label("orders"),
+                func.coalesce(func.sum(Order.delivery_charge), 0).label("earnings"),
+                func.sum(case((cast(Order.order_status, String) == "Delivered", 1), else_=0)).label(
+                    "delivered"
+                ),
+                func.sum(case((cast(Order.order_status, String) == "cancelled", 1), else_=0)).label(
+                    "cancelled"
+                ),
+                cast(DeliveryPartner.online_status, String).label("online_status"),
+            )
+            .join(Order, Order.delivery_partner_id == DeliveryPartner.delivery_partner_id)
+            .where(
+                DeliveryPartner.is_deleted.is_(False),
+                Order.is_deleted.is_(False),
+                Order.created_at >= start,
+            )
+            .group_by(
+                DeliveryPartner.delivery_partner_id,
+                DeliveryPartner.first_name,
+                DeliveryPartner.last_name,
+                cast(DeliveryPartner.online_status, String),
+            )
+            .order_by(func.count(Order.order_id).desc())
+            .limit(limit)
+        ).all()
+        payload: list[dict[str, Any]] = []
+        for r in rows:
+            name = " ".join([p for p in [r.first_name, r.last_name] if p]).strip() or r.first_name
+            orders = int(r.orders or 0)
+            payload.append(
+                {
+                    "delivery_partner_id": r.delivery_partner_id,
+                    "name": name,
+                    "orders": orders,
+                    "earnings": round(float(r.earnings or 0), 2),
+                    "delivered_rate": round((int(r.delivered or 0) / orders) * 100, 2) if orders > 0 else 0.0,
+                    "cancelled_rate": round((int(r.cancelled or 0) / orders) * 100, 2) if orders > 0 else 0.0,
+                    "online_status": str(r.online_status),
+                }
+            )
+        return payload
+
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> bool:
         result = self.db.execute(
             update(DeliveryPartner)

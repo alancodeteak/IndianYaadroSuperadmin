@@ -114,6 +114,56 @@ class ShopOwnerService:
             )
         return payload
 
+    def get_reports_overview(self, role: Role, days: int) -> dict[str, Any]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        return self.repository.get_reports_overview(days=days)
+
+    def get_reports_shops(self, role: Role, days: int, limit: int) -> list[dict[str, Any]]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        if limit < 1 or limit > 100:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="limit must be between 1 and 100",
+                status_code=400,
+            )
+        return self.repository.get_reports_shops(days=days, limit=limit)
+
+    def get_reports_funnel(self, role: Role, days: int) -> dict[str, Any]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        return self.repository.get_reports_funnel(days=days)
+
+    def get_reports_finance(self, role: Role, days: int) -> dict[str, Any]:
+        if role != Role.SUPERADMIN:
+            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        return self.repository.get_reports_finance(days=days)
+
     def create_supermarket(self, payload: SupermarketCreateRequest, role: Role) -> dict[str, Any]:
         if role not in {Role.PORTAL_USER, Role.SUPERADMIN}:
             raise ApiError(

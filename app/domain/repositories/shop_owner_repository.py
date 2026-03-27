@@ -26,6 +26,22 @@ class AbstractShopOwnerRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_reports_overview(self, days: int) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_reports_shops(self, days: int, limit: int) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_reports_funnel(self, days: int) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_reports_finance(self, days: int) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
     def create_supermarket(self, payload: SupermarketCreateRequest) -> str:
         """Persist supermarket (address + shop owner + optional subscription/promotion). Returns generated shop_id."""
         raise NotImplementedError
