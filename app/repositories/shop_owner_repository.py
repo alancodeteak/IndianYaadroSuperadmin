@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import String, cast, func, select, update
+from sqlalchemy import String, case, cast, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -324,6 +324,134 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 for inv in invoice_rows
             ],
             "daily_order_stats": self._daily_order_stats(shop_id),
+        }
+
+    def get_shop_activity_by_user_id(self, user_id: int, days: int) -> dict[str, Any] | None:
+        shop_row = self.db.execute(
+            select(ShopOwner.shop_id).where(
+                ShopOwner.user_id == user_id,
+                ShopOwner.is_supermarket.is_(True),
+                ShopOwner.is_deleted.is_(False),
+            )
+        ).first()
+        if shop_row is None:
+            return None
+
+        shop_id = str(shop_row.shop_id)
+        now = datetime.now(timezone.utc)
+        current_start = now - timedelta(days=days - 1)
+        previous_start = current_start - timedelta(days=days)
+
+        grouped_rows = self.db.execute(
+            select(
+                func.date(Order.created_at).label("day"),
+                func.count(Order.order_id).label("order_count"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("total_amount"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Pending", 1), else_=0)
+                ).label("pending"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Assigned", 1), else_=0)
+                ).label("assigned"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Picked Up", 1), else_=0)
+                ).label("picked_up"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Out for Delivery", 1), else_=0)
+                ).label("out_for_delivery"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "Delivered", 1), else_=0)
+                ).label("delivered"),
+                func.sum(
+                    case(
+                        (cast(Order.order_status, String) == "customer_not_available", 1),
+                        else_=0,
+                    )
+                ).label("customer_not_available"),
+                func.sum(
+                    case((cast(Order.order_status, String) == "cancelled", 1), else_=0)
+                ).label("cancelled"),
+            )
+            .where(
+                Order.shop_id == shop_id,
+                Order.is_deleted.is_(False),
+                Order.created_at >= current_start,
+                Order.created_at <= now,
+            )
+            .group_by(func.date(Order.created_at))
+            .order_by(func.date(Order.created_at).asc())
+        ).all()
+
+        orders_series: list[dict[str, Any]] = []
+        amount_series: list[dict[str, Any]] = []
+        statuses_series: list[dict[str, Any]] = []
+        total_orders = 0
+        total_amount = 0.0
+        delivered_count = 0
+
+        for row in grouped_rows:
+            day_str = str(row.day)
+            order_count = int(row.order_count or 0)
+            day_amount = float(row.total_amount or 0)
+            status_counts = {
+                "pending": int(row.pending or 0),
+                "assigned": int(row.assigned or 0),
+                "picked_up": int(row.picked_up or 0),
+                "out_for_delivery": int(row.out_for_delivery or 0),
+                "delivered": int(row.delivered or 0),
+                "customer_not_available": int(row.customer_not_available or 0),
+                "cancelled": int(row.cancelled or 0),
+            }
+
+            total_orders += order_count
+            total_amount += day_amount
+            delivered_count += status_counts["delivered"]
+
+            orders_series.append({"date": day_str, "count": order_count})
+            amount_series.append({"date": day_str, "total_amount": round(day_amount, 2)})
+            statuses_series.append({"date": day_str, "statuses": status_counts})
+
+        previous_totals = self.db.execute(
+            select(
+                func.count(Order.order_id).label("order_count"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("total_amount"),
+            )
+            .where(
+                Order.shop_id == shop_id,
+                Order.is_deleted.is_(False),
+                Order.created_at >= previous_start,
+                Order.created_at < current_start,
+            )
+        ).first()
+
+        prev_orders = int(previous_totals.order_count or 0) if previous_totals else 0
+        prev_amount = float(previous_totals.total_amount or 0) if previous_totals else 0.0
+
+        def _growth_pct(current: float, previous: float) -> float | None:
+            if previous <= 0:
+                return None
+            return round(((current - previous) / previous) * 100, 2)
+
+        return {
+            "shop_id": shop_id,
+            "window_days": days,
+            "series": {
+                "orders": orders_series,
+                "amount": amount_series,
+                "statuses": statuses_series,
+            },
+            "summary": {
+                "total_orders": total_orders,
+                "total_amount": round(total_amount, 2),
+                "avg_order_value": round(total_amount / total_orders, 2) if total_orders > 0 else 0.0,
+                "delivered_rate": round((delivered_count / total_orders) * 100, 2)
+                if total_orders > 0
+                else 0.0,
+            },
+            "growth": {
+                "orders_pct_vs_prev_period": _growth_pct(float(total_orders), float(prev_orders)),
+                "amount_pct_vs_prev_period": _growth_pct(total_amount, prev_amount),
+            },
         }
 
     def _daily_order_stats(self, shop_id: str) -> list[dict[str, Any]]:

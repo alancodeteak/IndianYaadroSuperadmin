@@ -80,6 +80,31 @@ class DeliveryPartnerService:
             )
         return detail
 
+    def get_delivery_partner_activity(self, delivery_partner_id: str, days: int) -> dict[str, Any]:
+        if not delivery_partner_id or delivery_partner_id.strip() == "":
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="delivery_partner_id cannot be empty",
+                status_code=400,
+            )
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+        detail = self.repository.get_delivery_partner_activity(
+            delivery_partner_id=delivery_partner_id.strip(),
+            days=days,
+        )
+        if detail is None:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Delivery partner not found",
+                status_code=404,
+            )
+        return detail
+
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> dict[str, Any]:
         if not delivery_partner_id or delivery_partner_id.strip() == "":
             raise ApiError(

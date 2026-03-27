@@ -9,3 +9,4 @@ pydantic-settings
 boto3
 pytest
 httpx
+python-multipart

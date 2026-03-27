@@ -85,6 +85,35 @@ class ShopOwnerService:
 
         return detail
 
+    def get_shop_activity(self, user_id: int, role: Role, days: int) -> dict[str, Any]:
+        if role not in {Role.SUPERADMIN, Role.PORTAL_USER}:
+            raise ApiError(
+                code=ErrorCode.UNAUTHORIZED,
+                message="Not enough permissions",
+                status_code=403,
+            )
+        if user_id <= 0:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="user_id must be > 0",
+                status_code=400,
+            )
+        if days < 1 or days > 90:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="days must be between 1 and 90",
+                status_code=400,
+            )
+
+        payload = self.repository.get_shop_activity_by_user_id(user_id=user_id, days=days)
+        if payload is None:
+            raise ApiError(
+                code=ErrorCode.RESOURCE_NOT_FOUND,
+                message="Supermarket not found",
+                status_code=404,
+            )
+        return payload
+
     def create_supermarket(self, payload: SupermarketCreateRequest, role: Role) -> dict[str, Any]:
         if role not in {Role.PORTAL_USER, Role.SUPERADMIN}:
             raise ApiError(
