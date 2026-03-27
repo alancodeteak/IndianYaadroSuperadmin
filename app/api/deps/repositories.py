@@ -6,6 +6,7 @@ from app.repositories.delivery_partner_repository import DeliveryPartnerReposito
 from app.repositories.daily_activity_repository import DailyActivityRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.order_repository import OrderRepository
+from app.repositories.sales_activity_repository import SalesActivityRepository
 from app.repositories.shop_owner_repository import ShopOwnerRepository
 
 
@@ -29,4 +30,8 @@ def get_invoice_repository(db: Session = Depends(get_db_session)) -> InvoiceRepo
 
 def get_daily_activity_repository(db: Session = Depends(get_db_session)) -> DailyActivityRepository:
     return DailyActivityRepository(db=db)
+
+
+def get_sales_activity_repository(db: Session = Depends(get_db_session)) -> SalesActivityRepository:
+    return SalesActivityRepository(db=db)
 
