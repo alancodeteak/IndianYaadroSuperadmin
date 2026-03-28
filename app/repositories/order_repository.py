@@ -12,17 +12,19 @@ class OrderRepository(AbstractOrderRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def list_orders_paginated(self, page: int, page_size: int) -> tuple[list[Order], int]:
-        total_sq = select(func.count()).select_from(Order).scalar_subquery()
-        stmt = (
-            select(Order, total_sq.label("_total"))
-            .order_by(Order.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
+    def list_orders_paginated(
+        self, page: int, page_size: int, *, shop_id: str | None = None
+    ) -> tuple[list[Order], int]:
+        stmt = select(Order, func.count().over().label("_total"))
+        if shop_id is not None:
+            stmt = stmt.where(Order.shop_id == shop_id)
+        stmt = stmt.order_by(Order.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
         rows = list(self.db.execute(stmt).all())
         if not rows:
-            total = int(self.db.scalar(select(func.count()).select_from(Order)) or 0)
+            count_stmt = select(func.count()).select_from(Order)
+            if shop_id is not None:
+                count_stmt = count_stmt.where(Order.shop_id == shop_id)
+            total = int(self.db.scalar(count_stmt) or 0)
             return [], total
         items = [r[0] for r in rows]
         total = int(rows[0][1])
@@ -45,4 +47,3 @@ class OrderRepository(AbstractOrderRepository):
         self.db.flush()
         self.db.refresh(order)
         return order
-

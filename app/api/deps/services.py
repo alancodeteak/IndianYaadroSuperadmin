@@ -34,8 +34,9 @@ from app.services.shop_owner_service import ShopOwnerService
 def get_order_service(
     repo: OrderRepository = Depends(get_order_repository),
     db: Session = Depends(get_db_session),
+    shop_repo: ShopOwnerRepository = Depends(get_shop_owner_repository),
 ) -> OrderService:
-    return OrderService(repository=repo, session=db)
+    return OrderService(repository=repo, session=db, shop_owner_repository=shop_repo)
 
 
 def get_shop_owner_service(
@@ -55,8 +56,9 @@ def get_delivery_partner_service(
 def get_invoice_service(
     repo: InvoiceRepository = Depends(get_invoice_repository),
     db: Session = Depends(get_db_session),
+    shop_repo: ShopOwnerRepository = Depends(get_shop_owner_repository),
 ) -> InvoiceService:
-    return InvoiceService(repository=repo, session=db)
+    return InvoiceService(repository=repo, session=db, shop_owner_repository=shop_repo)
 
 
 def get_daily_activity_service(

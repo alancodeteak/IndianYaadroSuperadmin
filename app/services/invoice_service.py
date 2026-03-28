@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -8,8 +9,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.api.exceptions.error_codes import ErrorCode
-from app.api.exceptions.http_errors import ApiError
-from app.domain.exceptions import NotFoundError
+from app.domain.exceptions import (
+    BusinessRuleViolationError,
+    ConflictError,
+    DomainValidationError,
+    NotFoundError,
+    PermissionDeniedError,
+)
+from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
 from app.api.v1.schemas.subscription_invoice import (
     SubscriptionInvoiceCreate,
     SubscriptionInvoiceListItem,
@@ -26,6 +33,24 @@ from app.services.validation import (
     validate_positive_id,
 )
 
+log = logging.getLogger(__name__)
+
+
+def _empty_accounts_overview(days: int) -> dict[str, Any]:
+    return {
+        "window_days": days,
+        "kpis": {
+            "collected_amount": 0.0,
+            "to_collect_amount": 0.0,
+            "overdue_shops": 0,
+            "pending_shops": 0,
+            "overdue_invoices": 0,
+            "pending_invoices": 0,
+        },
+        "series": {"daily_collected": []},
+        "lists": {"top_overdue_shops": []},
+    }
+
 
 @dataclass(frozen=True)
 class InvoiceNumberGenerator:
@@ -41,10 +66,90 @@ class InvoiceNumberGenerator:
 
 
 class InvoiceService:
-    def __init__(self, repository: AbstractInvoiceRepository, session: Session):
+    def __init__(
+        self,
+        repository: AbstractInvoiceRepository,
+        session: Session,
+        shop_owner_repository: AbstractShopOwnerRepository,
+    ):
         self.repository = repository
         self._session = session
+        self._shop_owner_repository = shop_owner_repository
         self.number_generator = InvoiceNumberGenerator()
+
+    def resolve_portal_shop_id(self, portal_email: str) -> str | None:
+        return self._shop_owner_repository.get_shop_id_by_email(portal_email)
+
+    def ensure_portal_invoice_access(self, portal_email: str, invoice_shop_id: str) -> None:
+        shop_id = self.resolve_portal_shop_id(portal_email)
+        if not shop_id or shop_id != invoice_shop_id:
+            log.info(
+                "portal invoice access denied",
+                extra={"portal_email": portal_email, "invoice_shop_id": invoice_shop_id},
+            )
+            raise PermissionDeniedError("Not enough permissions")
+
+    def get_invoice_for_portal(self, portal_email: str, invoice_id: int) -> SubscriptionInvoiceRead:
+        inv = self.get_invoice(invoice_id)
+        self.ensure_portal_invoice_access(portal_email, inv.shop_id)
+        return inv
+
+    def list_invoices_for_portal(
+        self,
+        portal_email: str,
+        *,
+        page: int,
+        limit: int,
+        filters: dict[str, Any],
+        order_by: list[tuple[str, str]] | None = None,
+    ) -> tuple[list[SubscriptionInvoiceListItem], int]:
+        shop_id = self.resolve_portal_shop_id(portal_email)
+        if not shop_id:
+            return [], 0
+        merged = {**filters, "shop_id": shop_id}
+        return self.list_invoices(page=page, limit=limit, filters=merged, order_by=order_by)
+
+    def create_manual_invoice_for_portal(
+        self, portal_email: str, payload: SubscriptionInvoiceCreate
+    ) -> SubscriptionInvoiceRead:
+        shop_id = self.resolve_portal_shop_id(portal_email)
+        if not shop_id or shop_id != payload.shop_id:
+            log.info(
+                "create_manual_invoice portal denied",
+                extra={"portal_email": portal_email, "payload_shop_id": getattr(payload, "shop_id", None)},
+            )
+            raise PermissionDeniedError("Not enough permissions")
+        return self.create_manual_invoice(payload)
+
+    def update_invoice_for_portal(
+        self, portal_email: str, invoice_id: int, payload: SubscriptionInvoiceUpdate
+    ) -> SubscriptionInvoiceRead:
+        inv = self.get_invoice(invoice_id)
+        self.ensure_portal_invoice_access(portal_email, inv.shop_id)
+        return self.update_invoice(invoice_id, payload)
+
+    def update_status_for_portal(
+        self,
+        portal_email: str,
+        invoice_id: int,
+        *,
+        new_status: InvoiceStatus,
+        paid_at: datetime | None = None,
+        transaction_reference: str | None = None,
+    ) -> SubscriptionInvoiceRead:
+        inv = self.get_invoice(invoice_id)
+        self.ensure_portal_invoice_access(portal_email, inv.shop_id)
+        return self.update_status(
+            invoice_id,
+            new_status=new_status,
+            paid_at=paid_at,
+            transaction_reference=transaction_reference,
+        )
+
+    def retry_bill_for_portal(self, portal_email: str, invoice_id: int) -> SubscriptionInvoiceRead:
+        inv = self.get_invoice(invoice_id)
+        self.ensure_portal_invoice_access(portal_email, inv.shop_id)
+        return self.retry_bill_generation(invoice_id)
 
     def list_invoices(
         self,
@@ -73,11 +178,7 @@ class InvoiceService:
             if key in data and data[key] is not None:
                 value = Decimal(str(data[key]))
                 if value < 0:
-                    raise ApiError(
-                        code=ErrorCode.VALIDATION_ERROR,
-                        message=f"{key} cannot be negative",
-                        status_code=400,
-                    )
+                    raise DomainValidationError(f"{key} cannot be negative", code=ErrorCode.VALIDATION_ERROR)
 
     def create_manual_invoice(self, payload: SubscriptionInvoiceCreate) -> SubscriptionInvoiceRead:
         self._validate_amounts(payload)
@@ -87,10 +188,9 @@ class InvoiceService:
             billing_period_start=payload.billing_period_start,
             document_type=payload.document_type.value,
         ):
-            raise ApiError(
+            raise ConflictError(
+                "An invoice already exists for this shop, billing period, and document type",
                 code=ErrorCode.CONFLICT,
-                message="An invoice already exists for this shop, billing period, and document type",
-                status_code=409,
             )
         # Invoice number is provided externally; keep old behavior for backfill/manuals
         with session_commit_scope(self._session):
@@ -130,10 +230,9 @@ class InvoiceService:
             billing_period_start=billing_period_start,
             document_type=document_type.value,
         ):
-            raise ApiError(
+            raise ConflictError(
+                "Document already exists for this shop and period",
                 code=ErrorCode.CONFLICT,
-                message="Document already exists for this shop and period",
-                status_code=409,
             )
         now = datetime.now(timezone.utc)
         next_seq = self._next_sequence(document_type=document_type, now=now)
@@ -167,19 +266,16 @@ class InvoiceService:
         data = payload.model_dump(exclude_unset=True)
         # Protect invoice_number from updates
         if "invoice_number" in data:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="invoice_number cannot be modified",
-                status_code=400,
+            raise DomainValidationError(
+                "invoice_number cannot be modified", code=ErrorCode.VALIDATION_ERROR
             )
         # Limit edits when PAID
         if invoice.status == InvoiceStatus.PAID:
             forbidden_keys = {"amount", "discount", "other_charges", "cgst", "igst", "sgst", "billing_period_start", "billing_period_end"}
             if any(k in data for k in forbidden_keys):
-                raise ApiError(
+                raise BusinessRuleViolationError(
+                    "Paid invoices have restricted editable fields",
                     code=ErrorCode.VALIDATION_ERROR,
-                    message="Paid invoices have restricted editable fields",
-                    status_code=400,
                 )
         self._validate_amounts(payload)
         with session_commit_scope(self._session):
@@ -211,16 +307,13 @@ class InvoiceService:
             if paid_at is None:
                 paid_at = now
             if paid_at > now:
-                raise ApiError(
-                    code=ErrorCode.VALIDATION_ERROR,
-                    message="paid_at cannot be in the future",
-                    status_code=400,
+                raise DomainValidationError(
+                    "paid_at cannot be in the future", code=ErrorCode.VALIDATION_ERROR
                 )
             if not transaction_reference:
-                raise ApiError(
+                raise DomainValidationError(
+                    "transaction_reference is required when marking invoice as PAID",
                     code=ErrorCode.VALIDATION_ERROR,
-                    message="transaction_reference is required when marking invoice as PAID",
-                    status_code=400,
                 )
             update_data["paid_at"] = paid_at
             update_data["transaction_reference"] = transaction_reference
@@ -239,9 +332,13 @@ class InvoiceService:
     def generate_bill_for_invoice(self, invoice_id: int) -> SubscriptionInvoiceRead:
         invoice = self._require_invoice(invoice_id)
         if invoice.document_type != InvoiceDocumentType.INVOICE:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="Bills cannot generate bills", status_code=400)
+            raise BusinessRuleViolationError(
+                "Bills cannot generate bills", code=ErrorCode.VALIDATION_ERROR
+            )
         if invoice.status != InvoiceStatus.PAID:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="Only PAID invoices can generate bills", status_code=400)
+            raise BusinessRuleViolationError(
+                "Only PAID invoices can generate bills", code=ErrorCode.VALIDATION_ERROR
+            )
 
         if self.repository.exists_for_shop_period_type(
             shop_id=invoice.shop_id,
@@ -261,7 +358,7 @@ class InvoiceService:
             )
             if rows:
                 return SubscriptionInvoiceRead.model_validate(rows[0])
-            raise ApiError(code=ErrorCode.CONFLICT, message="Bill already exists", status_code=409)
+            raise ConflictError("Bill already exists", code=ErrorCode.CONFLICT)
 
         return self.create_system_invoice(
             subscription_id=invoice.subscription_id,
@@ -300,11 +397,9 @@ class InvoiceService:
                     status=InvoiceStatus.ISSUED,
                 )
                 generated += 1
-            except ApiError as e:
-                if e.code == ErrorCode.CONFLICT:
-                    skipped += 1
-                    continue
-                raise
+            except ConflictError:
+                skipped += 1
+                continue
         return {"generated": generated, "skipped": skipped}
 
     def run_overdue_automation(self) -> dict[str, int]:
@@ -398,6 +493,12 @@ class InvoiceService:
         validate_days_range(days, min_d=1, max_d=365)
         return self.repository.get_accounts_overview(days=days, shop_id=shop_id)
 
+    def get_accounts_overview_for_portal(self, portal_email: str, *, days: int) -> dict[str, Any]:
+        shop_id = self.resolve_portal_shop_id(portal_email)
+        if not shop_id:
+            return _empty_accounts_overview(days)
+        return self.get_accounts_overview(days=days, shop_id=shop_id)
+
     def _ensure_valid_transition(self, current: InvoiceStatus, new: InvoiceStatus) -> None:
         if current == new:
             return
@@ -411,9 +512,8 @@ class InvoiceService:
             InvoiceStatus.VOID: set(),
         }
         if new not in allowed.get(current, set()):
-            raise ApiError(
+            raise BusinessRuleViolationError(
+                f"Cannot transition invoice from {current.value} to {new.value}",
                 code=ErrorCode.VALIDATION_ERROR,
-                message=f"Cannot transition invoice from {current.value} to {new.value}",
-                status_code=400,
             )
 

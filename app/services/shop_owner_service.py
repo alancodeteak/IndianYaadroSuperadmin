@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.api.exceptions.error_codes import ErrorCode
-from app.api.exceptions.http_errors import ApiError
+from app.domain.exceptions import NotFoundError, PermissionDeniedError
 from app.api.v1.schemas.shop_owner import (
     SupermarketCreateRequest,
     SupermarketListFilters,
@@ -64,11 +64,7 @@ class ShopOwnerService:
 
         detail = self.repository.get_supermarket_detail_by_user_id(user_id=user_id)
         if detail is None:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Supermarket not found",
-                status_code=404,
-            )
+            raise NotFoundError("Supermarket not found", code=ErrorCode.RESOURCE_NOT_FOUND)
 
         if role == Role.PORTAL_USER:
             detail["delivery_partners"] = []
@@ -77,65 +73,49 @@ class ShopOwnerService:
             # Superadmin receives full detail including daily order metrics.
             pass
         else:
-            raise ApiError(
-                code=ErrorCode.UNAUTHORIZED,
-                message="Not enough permissions",
-                status_code=403,
-            )
+            raise PermissionDeniedError("Not enough permissions")
 
         return detail
 
     def get_shop_activity(self, user_id: int, role: Role, days: int) -> dict[str, Any]:
         if role not in {Role.SUPERADMIN, Role.PORTAL_USER}:
-            raise ApiError(
-                code=ErrorCode.UNAUTHORIZED,
-                message="Not enough permissions",
-                status_code=403,
-            )
+            raise PermissionDeniedError("Not enough permissions")
         validate_positive_id(user_id, field_name="user_id")
         validate_days_range(days)
 
         payload = self.repository.get_shop_activity_by_user_id(user_id=user_id, days=days)
         if payload is None:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Supermarket not found",
-                status_code=404,
-            )
+            raise NotFoundError("Supermarket not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return payload
 
     def get_reports_overview(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
-            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+            raise PermissionDeniedError("Not enough permissions")
         validate_days_range(days)
         return self.repository.get_reports_overview(days=days)
 
     def get_reports_shops(self, role: Role, days: int, limit: int) -> list[dict[str, Any]]:
         if role != Role.SUPERADMIN:
-            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+            raise PermissionDeniedError("Not enough permissions")
         validate_days_range(days)
         validate_limit(limit, max_limit=100)
         return self.repository.get_reports_shops(days=days, limit=limit)
 
     def get_reports_funnel(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
-            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+            raise PermissionDeniedError("Not enough permissions")
         validate_days_range(days)
         return self.repository.get_reports_funnel(days=days)
 
     def get_reports_finance(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
-            raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
+            raise PermissionDeniedError("Not enough permissions")
         validate_days_range(days)
         return self.repository.get_reports_finance(days=days)
 
     def create_supermarket(self, payload: SupermarketCreateRequest, role: Role) -> dict[str, Any]:
         if role not in {Role.PORTAL_USER, Role.SUPERADMIN}:
-            raise ApiError(
-                code=ErrorCode.UNAUTHORIZED,
-                message="Not enough permissions",
-                status_code=403,
-            )
+            raise PermissionDeniedError("Not enough permissions")
         # Portal users cannot set blocked/suspended at create time: repository always inserts ACTIVE.
         # Admin-only PATCH can change status / block flags.
 
@@ -147,11 +127,7 @@ class ShopOwnerService:
         self, user_id: int, payload: SupermarketUpdateRequest, role: Role
     ) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
-            raise ApiError(
-                code=ErrorCode.UNAUTHORIZED,
-                message="Not enough permissions",
-                status_code=403,
-            )
+            raise PermissionDeniedError("Not enough permissions")
         validate_positive_id(user_id, field_name="user_id")
 
         with session_commit_scope(self._session):
@@ -160,11 +136,7 @@ class ShopOwnerService:
 
     def delete_supermarket(self, user_id: int, role: Role) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
-            raise ApiError(
-                code=ErrorCode.UNAUTHORIZED,
-                message="Not enough permissions",
-                status_code=403,
-            )
+            raise PermissionDeniedError("Not enough permissions")
         validate_positive_id(user_id, field_name="user_id")
 
         with session_commit_scope(self._session):

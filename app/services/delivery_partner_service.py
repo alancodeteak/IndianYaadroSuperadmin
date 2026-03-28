@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.api.exceptions.error_codes import ErrorCode
-from app.api.exceptions.http_errors import ApiError
+from app.domain.exceptions import NotFoundError
 from app.api.v1.schemas.delivery_partner import DeliveryPartnerListFilters
 from app.domain.repositories.delivery_partner_repository import AbstractDeliveryPartnerRepository
 from app.infrastructure.db.transaction import session_commit_scope
@@ -67,11 +67,7 @@ class DeliveryPartnerService:
             delivery_partner_id=did
         )
         if detail is None:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Delivery partner not found",
-                status_code=404,
-            )
+            raise NotFoundError("Delivery partner not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return detail
 
     def get_delivery_partner_activity(self, delivery_partner_id: str, days: int) -> dict[str, Any]:
@@ -82,11 +78,7 @@ class DeliveryPartnerService:
             days=days,
         )
         if detail is None:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Delivery partner not found",
-                status_code=404,
-            )
+            raise NotFoundError("Delivery partner not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return detail
 
     def get_reports_delivery_partners(self, days: int, limit: int) -> list[dict[str, Any]]:
@@ -102,11 +94,7 @@ class DeliveryPartnerService:
                 blocked=bool(blocked),
             )
         if not ok:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Delivery partner not found",
-                status_code=404,
-            )
+            raise NotFoundError("Delivery partner not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return {"delivery_partner_id": did, "is_blocked": bool(blocked)}
 
     def delete_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
@@ -114,11 +102,7 @@ class DeliveryPartnerService:
         with session_commit_scope(self._session):
             ok = self.repository.soft_delete_delivery_partner(did)
         if not ok:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Delivery partner not found",
-                status_code=404,
-            )
+            raise NotFoundError("Delivery partner not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return {"delivery_partner_id": did, "deleted": True}
 
     def restore_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
@@ -126,10 +110,6 @@ class DeliveryPartnerService:
         with session_commit_scope(self._session):
             ok = self.repository.restore_delivery_partner(did)
         if not ok:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Delivery partner not found",
-                status_code=404,
-            )
+            raise NotFoundError("Delivery partner not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return {"delivery_partner_id": did, "restored": True}
 

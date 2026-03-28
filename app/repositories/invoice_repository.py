@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
-
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.orm import Session
@@ -50,10 +48,10 @@ class InvoiceRepository(AbstractInvoiceRepository):
             like = f"%{search}%"
             conditions.append(SubscriptionInvoice.invoice_number.ilike(like))
 
-        count_stmt = select(func.count(SubscriptionInvoice.invoice_id)).where(and_(*conditions))
-        total = int(self.db.scalar(count_stmt) or 0)
-
-        stmt = select(SubscriptionInvoice).where(and_(*conditions))
+        where_clause = and_(*conditions) if conditions else None
+        stmt = select(SubscriptionInvoice, func.count().over().label("_total"))
+        if where_clause is not None:
+            stmt = stmt.where(where_clause)
 
         for field, direction in order_by or []:
             column = getattr(SubscriptionInvoice, field, None)
@@ -65,8 +63,16 @@ class InvoiceRepository(AbstractInvoiceRepository):
                 stmt = stmt.order_by(column.asc())
 
         stmt = stmt.offset((page - 1) * limit).limit(limit)
-        rows = list(self.db.scalars(stmt).all())
-        return rows, total
+        rows = list(self.db.execute(stmt).all())
+        if not rows:
+            count_stmt = select(func.count(SubscriptionInvoice.invoice_id))
+            if where_clause is not None:
+                count_stmt = count_stmt.where(where_clause)
+            total = int(self.db.scalar(count_stmt) or 0)
+            return [], total
+        items = [r[0] for r in rows]
+        total = int(rows[0][1])
+        return items, total
 
     def get_by_id(self, invoice_id: int) -> SubscriptionInvoice | None:
         return self.db.get(SubscriptionInvoice, invoice_id)
