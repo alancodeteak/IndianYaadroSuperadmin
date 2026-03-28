@@ -954,7 +954,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
 
         try:
-            self.db.commit()
+            self.db.flush()
         except IntegrityError as exc:
             self.db.rollback()
             raise ApiError(
@@ -1089,7 +1089,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
 
         self.db.add(shop_owner)
         try:
-            self.db.commit()
+            self.db.flush()
         except IntegrityError as exc:
             self.db.rollback()
             raise ApiError(
@@ -1126,5 +1126,5 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             .values(is_deleted=True)
         )
 
-        self.db.commit()
+        self.db.flush()
 

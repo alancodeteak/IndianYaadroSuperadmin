@@ -39,9 +39,10 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
 
 async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
+    details = getattr(exc, "details", None)
     return JSONResponse(
         status_code=exc.status_code,
-        content=_error_payload(exc.code, exc.message, None, request_id=request_id),
+        content=_error_payload(exc.code, exc.message, details, request_id=request_id),
     )
 
 

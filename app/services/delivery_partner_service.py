@@ -3,10 +3,13 @@ from __future__ import annotations
 from math import ceil
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.api.v1.schemas.delivery_partner import DeliveryPartnerListFilters
 from app.domain.repositories.delivery_partner_repository import AbstractDeliveryPartnerRepository
+from app.infrastructure.db.transaction import session_commit_scope
 from app.services.validation import (
     validate_days_range,
     validate_limit,
@@ -16,8 +19,9 @@ from app.services.validation import (
 
 
 class DeliveryPartnerService:
-    def __init__(self, repository: AbstractDeliveryPartnerRepository):
+    def __init__(self, repository: AbstractDeliveryPartnerRepository, session: Session):
         self.repository = repository
+        self._session = session
 
     def list_delivery_partners(
         self,
@@ -92,10 +96,11 @@ class DeliveryPartnerService:
 
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> dict[str, Any]:
         did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
-        ok = self.repository.set_delivery_partner_blocked(
-            did,
-            blocked=bool(blocked),
-        )
+        with session_commit_scope(self._session):
+            ok = self.repository.set_delivery_partner_blocked(
+                did,
+                blocked=bool(blocked),
+            )
         if not ok:
             raise ApiError(
                 code=ErrorCode.RESOURCE_NOT_FOUND,
@@ -106,7 +111,8 @@ class DeliveryPartnerService:
 
     def delete_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
         did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
-        ok = self.repository.soft_delete_delivery_partner(did)
+        with session_commit_scope(self._session):
+            ok = self.repository.soft_delete_delivery_partner(did)
         if not ok:
             raise ApiError(
                 code=ErrorCode.RESOURCE_NOT_FOUND,
@@ -117,7 +123,8 @@ class DeliveryPartnerService:
 
     def restore_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
         did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
-        ok = self.repository.restore_delivery_partner(did)
+        with session_commit_scope(self._session):
+            ok = self.repository.restore_delivery_partner(did)
         if not ok:
             raise ApiError(
                 code=ErrorCode.RESOURCE_NOT_FOUND,

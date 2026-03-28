@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.domain.exceptions import NotFoundError
@@ -16,6 +18,7 @@ from app.api.v1.schemas.subscription_invoice import (
 )
 from app.domain.repositories.invoice_repository import AbstractInvoiceRepository
 from app.infrastructure.db.models.enums import InvoiceDocumentType, InvoiceStatus
+from app.infrastructure.db.transaction import session_commit_scope
 from app.infrastructure.db.models.subscription_invoice import SubscriptionInvoice
 from app.services.validation import (
     validate_days_range,
@@ -38,8 +41,9 @@ class InvoiceNumberGenerator:
 
 
 class InvoiceService:
-    def __init__(self, repository: AbstractInvoiceRepository):
+    def __init__(self, repository: AbstractInvoiceRepository, session: Session):
         self.repository = repository
+        self._session = session
         self.number_generator = InvoiceNumberGenerator()
 
     def list_invoices(
@@ -89,7 +93,8 @@ class InvoiceService:
                 status_code=409,
             )
         # Invoice number is provided externally; keep old behavior for backfill/manuals
-        created = self.repository.create_invoice(payload)
+        with session_commit_scope(self._session):
+            created = self.repository.create_invoice(payload)
         return SubscriptionInvoiceRead.model_validate(created)
 
     def _next_sequence(self, *, document_type: InvoiceDocumentType, now: datetime) -> int:
@@ -153,7 +158,8 @@ class InvoiceService:
         if notes:
             object.__setattr__(payload, "notes", notes)
         self._validate_amounts(payload)
-        created = self.repository.create_invoice(payload)
+        with session_commit_scope(self._session):
+            created = self.repository.create_invoice(payload)
         return SubscriptionInvoiceRead.model_validate(created)
 
     def update_invoice(self, invoice_id: int, payload: SubscriptionInvoiceUpdate) -> SubscriptionInvoiceRead:
@@ -176,7 +182,8 @@ class InvoiceService:
                     status_code=400,
                 )
         self._validate_amounts(payload)
-        updated = self.repository.update_invoice(invoice, payload)
+        with session_commit_scope(self._session):
+            updated = self.repository.update_invoice(invoice, payload)
         return SubscriptionInvoiceRead.model_validate(updated)
 
     def _require_invoice(self, invoice_id: int) -> SubscriptionInvoice:
@@ -219,7 +226,8 @@ class InvoiceService:
             update_data["transaction_reference"] = transaction_reference
 
         update_payload = SubscriptionInvoiceUpdate(**update_data)
-        updated = self.repository.update_invoice(invoice, update_payload)
+        with session_commit_scope(self._session):
+            updated = self.repository.update_invoice(invoice, update_payload)
         if new_status == InvoiceStatus.PAID and updated.document_type == InvoiceDocumentType.INVOICE:
             # Keep invoice status as PAID even if bill generation fails.
             try:
@@ -304,25 +312,25 @@ class InvoiceService:
         transitioned_to_overdue = 0
         now = datetime.now(timezone.utc)
 
-        # Rule: After the 5th of each month, any unpaid ISSUED invoices become PENDING.
-        # (We treat "unpaid" here as: status still ISSUED, document_type INVOICE.)
-        if now.day > 5:
-            for invoice in self.repository.list_issued_invoices_for_current_month():
-                self.repository.update_invoice(
-                    invoice,
-                    SubscriptionInvoiceUpdate(status=InvoiceStatus.PENDING),
-                )
-                transitioned_to_pending += 1
+        with session_commit_scope(self._session):
+            # Rule: After the 5th of each month, any unpaid ISSUED invoices become PENDING.
+            if now.day > 5:
+                for invoice in self.repository.list_issued_invoices_for_current_month():
+                    self.repository.update_invoice(
+                        invoice,
+                        SubscriptionInvoiceUpdate(status=InvoiceStatus.PENDING),
+                    )
+                    transitioned_to_pending += 1
 
-        for invoice in self.repository.list_pending_invoices():
-            next_invoice_date = (invoice.billing_period_start + timedelta(days=32)).replace(day=1)
-            overdue_trigger = next_invoice_date - timedelta(days=5)
-            if now >= overdue_trigger:
-                self.repository.update_invoice(
-                    invoice,
-                    SubscriptionInvoiceUpdate(status=InvoiceStatus.OVERDUE),
-                )
-                transitioned_to_overdue += 1
+            for invoice in self.repository.list_pending_invoices():
+                next_invoice_date = (invoice.billing_period_start + timedelta(days=32)).replace(day=1)
+                overdue_trigger = next_invoice_date - timedelta(days=5)
+                if now >= overdue_trigger:
+                    self.repository.update_invoice(
+                        invoice,
+                        SubscriptionInvoiceUpdate(status=InvoiceStatus.OVERDUE),
+                    )
+                    transitioned_to_overdue += 1
         return {
             "transitioned_to_pending": transitioned_to_pending,
             "transitioned_to_overdue": transitioned_to_overdue,
@@ -350,8 +358,9 @@ class InvoiceService:
         peer = rows[0]
         latest = invoice if invoice.updated_at >= peer.updated_at else peer
         note_value = latest.notes
-        self.repository.update_invoice(invoice, SubscriptionInvoiceUpdate(notes=note_value))
-        self.repository.update_invoice(peer, SubscriptionInvoiceUpdate(notes=note_value))
+        with session_commit_scope(self._session):
+            self.repository.update_invoice(invoice, SubscriptionInvoiceUpdate(notes=note_value))
+            self.repository.update_invoice(peer, SubscriptionInvoiceUpdate(notes=note_value))
         return {"synced": 1}
 
     def import_legacy_documents(self, rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -380,7 +389,8 @@ class InvoiceService:
                 document_type=InvoiceDocumentType(str(row.get("document_type", "INVOICE"))),
                 status=InvoiceStatus(str(row.get("status", "ISSUED"))),
             )
-            self.repository.create_invoice(payload)
+            with session_commit_scope(self._session):
+                self.repository.create_invoice(payload)
             imported += 1
         return {"imported": imported, "skipped": skipped}
 

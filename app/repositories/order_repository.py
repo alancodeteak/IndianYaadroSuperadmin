@@ -34,7 +34,7 @@ class OrderRepository(AbstractOrderRepository):
     def create_order(self, payload: OrderCreate) -> Order:
         order = Order(**payload.model_dump())
         self.db.add(order)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(order)
         return order
 
@@ -42,7 +42,7 @@ class OrderRepository(AbstractOrderRepository):
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(order, key, value)
         self.db.add(order)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(order)
         return order
 

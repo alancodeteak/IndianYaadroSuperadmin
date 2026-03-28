@@ -1,4 +1,5 @@
 from fastapi import Depends
+from sqlalchemy.orm import Session
 
 from app.api.core.config import get_settings
 from app.api.deps.otp import get_otp_notifier, get_otp_store
@@ -10,6 +11,7 @@ from app.api.deps.repositories import (
     get_sales_activity_repository,
     get_shop_owner_repository,
 )
+from app.infrastructure.db.session import get_db_session
 from app.api.deps.session import get_session_service
 from app.repositories.delivery_partner_repository import DeliveryPartnerRepository
 from app.repositories.daily_activity_repository import DailyActivityRepository
@@ -25,27 +27,36 @@ from app.services.order_service import OrderService
 from app.services.delivery_partner_service import DeliveryPartnerService
 from app.services.shop_owner_service import ShopOwnerService
 
+# Services receive the same Session instance as repositories (per-request scope).
+# See app.api.deps.lifecycle for lifecycle notes.
 
-def get_order_service(repo: OrderRepository = Depends(get_order_repository)) -> OrderService:
-    return OrderService(repository=repo)
+
+def get_order_service(
+    repo: OrderRepository = Depends(get_order_repository),
+    db: Session = Depends(get_db_session),
+) -> OrderService:
+    return OrderService(repository=repo, session=db)
 
 
 def get_shop_owner_service(
     repo: ShopOwnerRepository = Depends(get_shop_owner_repository),
+    db: Session = Depends(get_db_session),
 ) -> ShopOwnerService:
-    return ShopOwnerService(repository=repo)
+    return ShopOwnerService(repository=repo, session=db)
 
 
 def get_delivery_partner_service(
     repo: DeliveryPartnerRepository = Depends(get_delivery_partner_repository),
+    db: Session = Depends(get_db_session),
 ) -> DeliveryPartnerService:
-    return DeliveryPartnerService(repository=repo)
+    return DeliveryPartnerService(repository=repo, session=db)
 
 
 def get_invoice_service(
     repo: InvoiceRepository = Depends(get_invoice_repository),
+    db: Session = Depends(get_db_session),
 ) -> InvoiceService:
-    return InvoiceService(repository=repo)
+    return InvoiceService(repository=repo, session=db)
 
 
 def get_daily_activity_service(

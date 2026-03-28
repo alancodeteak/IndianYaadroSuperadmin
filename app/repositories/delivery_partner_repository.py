@@ -413,9 +413,8 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             .values(is_blocked=bool(blocked))
         )
         if result.rowcount == 0:
-            self.db.rollback()
             return False
-        self.db.commit()
+        self.db.flush()
         return True
 
     def soft_delete_delivery_partner(self, delivery_partner_id: str) -> bool:
@@ -428,9 +427,8 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             .values(is_deleted=True)
         )
         if result.rowcount == 0:
-            self.db.rollback()
             return False
-        self.db.commit()
+        self.db.flush()
         return True
 
     def restore_delivery_partner(self, delivery_partner_id: str) -> bool:
@@ -443,8 +441,7 @@ class DeliveryPartnerRepository(AbstractDeliveryPartnerRepository):
             .values(is_deleted=False)
         )
         if result.rowcount == 0:
-            self.db.rollback()
             return False
-        self.db.commit()
+        self.db.flush()
         return True
 

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from sqlalchemy.orm import Session
+
 from app.api.v1.schemas.order import OrderCreate, OrderUpdate
 from app.api.core.constants import MAX_PAGE_SIZE
 from app.api.exceptions.error_codes import ErrorCode
 from app.domain.exceptions import NotFoundError
 from app.domain.repositories.order_repository import AbstractOrderRepository
 from app.infrastructure.db.models.order import Order
+from app.infrastructure.db.transaction import session_commit_scope
 from app.services.validation import validate_page_and_limit
 
 
 class OrderService:
-    def __init__(self, repository: AbstractOrderRepository):
+    def __init__(self, repository: AbstractOrderRepository, session: Session):
         self.repository = repository
+        self._session = session
 
     def list_orders(self, page: int, page_size: int) -> tuple[list[Order], int]:
         validate_page_and_limit(page, page_size, max_limit=MAX_PAGE_SIZE)
@@ -24,9 +28,11 @@ class OrderService:
         return item
 
     def create_order(self, payload: OrderCreate) -> Order:
-        return self.repository.create_order(payload)
+        with session_commit_scope(self._session):
+            return self.repository.create_order(payload)
 
     def update_order(self, order_id: int, payload: OrderUpdate) -> Order:
         item = self.get_order(order_id)
-        return self.repository.update_order(item, payload)
+        with session_commit_scope(self._session):
+            return self.repository.update_order(item, payload)
 

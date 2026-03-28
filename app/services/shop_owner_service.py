@@ -3,6 +3,8 @@ from __future__ import annotations
 from math import ceil
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.api.v1.schemas.shop_owner import (
@@ -12,6 +14,7 @@ from app.api.v1.schemas.shop_owner import (
 )
 from app.domain.enums.roles import Role
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
+from app.infrastructure.db.transaction import session_commit_scope
 from app.services.validation import (
     validate_days_range,
     validate_limit,
@@ -21,8 +24,9 @@ from app.services.validation import (
 
 
 class ShopOwnerService:
-    def __init__(self, repository: AbstractShopOwnerRepository):
+    def __init__(self, repository: AbstractShopOwnerRepository, session: Session):
         self.repository = repository
+        self._session = session
 
     def list_supermarkets(
         self,
@@ -135,7 +139,8 @@ class ShopOwnerService:
         # Portal users cannot set blocked/suspended at create time: repository always inserts ACTIVE.
         # Admin-only PATCH can change status / block flags.
 
-        self.repository.create_supermarket(payload)
+        with session_commit_scope(self._session):
+            self.repository.create_supermarket(payload)
         return self.get_supermarket_detail(user_id=payload.user_id, role=role)
 
     def update_supermarket(
@@ -149,7 +154,8 @@ class ShopOwnerService:
             )
         validate_positive_id(user_id, field_name="user_id")
 
-        self.repository.update_supermarket(user_id=user_id, payload=payload)
+        with session_commit_scope(self._session):
+            self.repository.update_supermarket(user_id=user_id, payload=payload)
         return self.get_supermarket_detail(user_id=user_id, role=role)
 
     def delete_supermarket(self, user_id: int, role: Role) -> dict[str, Any]:
@@ -161,6 +167,7 @@ class ShopOwnerService:
             )
         validate_positive_id(user_id, field_name="user_id")
 
-        self.repository.soft_delete_supermarket(user_id=user_id)
+        with session_commit_scope(self._session):
+            self.repository.soft_delete_supermarket(user_id=user_id)
         return {"deleted": True, "user_id": user_id}
 

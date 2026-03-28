@@ -101,7 +101,7 @@ class InvoiceRepository(AbstractInvoiceRepository):
     def create_invoice(self, payload: SubscriptionInvoiceCreate) -> SubscriptionInvoice:
         invoice = SubscriptionInvoice(**payload.model_dump())
         self.db.add(invoice)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(invoice)
         return invoice
 
@@ -113,7 +113,7 @@ class InvoiceRepository(AbstractInvoiceRepository):
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(invoice, key, value)
         self.db.add(invoice)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(invoice)
         return invoice
 

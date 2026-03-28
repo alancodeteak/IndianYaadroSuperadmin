@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+# Per-request session; never cache on a repository or singleton.
 from app.infrastructure.db.session import get_db_session
 from app.repositories.delivery_partner_repository import DeliveryPartnerRepository
 from app.repositories.daily_activity_repository import DailyActivityRepository

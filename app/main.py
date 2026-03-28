@@ -30,9 +30,15 @@ async def lifespan(app: FastAPI):
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        logger.info("Database connection OK")
+        logger.info(
+            "startup readiness: database OK",
+            extra={"fail_fast_on_db_error": settings.FAIL_FAST_ON_DB_ERROR},
+        )
     except Exception as exc:
-        logger.error("Database connection FAILED", extra={"error_type": type(exc).__name__})
+        logger.error(
+            "startup readiness: database FAILED",
+            extra={"error_type": type(exc).__name__, "fail_fast": settings.FAIL_FAST_ON_DB_ERROR},
+        )
         if settings.FAIL_FAST_ON_DB_ERROR:
             raise
     yield
