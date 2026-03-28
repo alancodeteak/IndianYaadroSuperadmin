@@ -10,6 +10,7 @@ from starlette import status
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
+from app.domain.exceptions import DomainError
 
 
 def _error_payload(
@@ -33,6 +34,14 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content=_error_payload(exc.code, exc.message, exc.details, request_id=request_id),
+    )
+
+
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(exc.code, exc.message, None, request_id=request_id),
     )
 
 
@@ -83,6 +92,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(DomainError, domain_error_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

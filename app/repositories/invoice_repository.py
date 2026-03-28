@@ -75,6 +75,29 @@ class InvoiceRepository(AbstractInvoiceRepository):
         stmt = select(SubscriptionInvoice).where(SubscriptionInvoice.invoice_number == invoice_number)
         return self.db.scalar(stmt)
 
+    def max_invoice_sequence_suffix(
+        self,
+        *,
+        document_type: InvoiceDocumentType,
+        prefix: str,
+        ym: str,
+    ) -> int:
+        pattern = f"%{prefix}-{ym}-%"
+        stmt = select(func.max(SubscriptionInvoice.invoice_number)).where(
+            SubscriptionInvoice.document_type == document_type,
+            SubscriptionInvoice.invoice_number.ilike(pattern),
+        )
+        max_number = self.db.scalar(stmt)
+        if not max_number:
+            return 0
+        parts = str(max_number).split("-")
+        if len(parts) != 3 or parts[0] != prefix or parts[1] != ym:
+            return 0
+        try:
+            return int(parts[2])
+        except ValueError:
+            return 0
+
     def create_invoice(self, payload: SubscriptionInvoiceCreate) -> SubscriptionInvoice:
         invoice = SubscriptionInvoice(**payload.model_dump())
         self.db.add(invoice)

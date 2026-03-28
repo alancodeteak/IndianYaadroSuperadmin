@@ -7,6 +7,12 @@ from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.api.v1.schemas.delivery_partner import DeliveryPartnerListFilters
 from app.domain.repositories.delivery_partner_repository import AbstractDeliveryPartnerRepository
+from app.services.validation import (
+    validate_days_range,
+    validate_limit,
+    validate_page_and_limit,
+    validate_non_empty_str,
+)
 
 
 class DeliveryPartnerService:
@@ -27,18 +33,7 @@ class DeliveryPartnerService:
         online_status: str | None = None,
         include_deleted: bool = True,
     ) -> dict[str, Any]:
-        if page < 1:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="page must be >= 1",
-                status_code=400,
-            )
-        if limit < 1 or limit > 100:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="limit must be between 1 and 100",
-                status_code=400,
-            )
+        validate_page_and_limit(page, limit, max_limit=100)
 
         filters = DeliveryPartnerListFilters(
             name=name,
@@ -63,14 +58,9 @@ class DeliveryPartnerService:
         }
 
     def get_delivery_partner_detail(self, delivery_partner_id: str) -> dict[str, Any]:
-        if not delivery_partner_id or delivery_partner_id.strip() == "":
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="delivery_partner_id cannot be empty",
-                status_code=400,
-            )
+        did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
         detail = self.repository.get_delivery_partner_detail(
-            delivery_partner_id=delivery_partner_id.strip()
+            delivery_partner_id=did
         )
         if detail is None:
             raise ApiError(
@@ -81,20 +71,10 @@ class DeliveryPartnerService:
         return detail
 
     def get_delivery_partner_activity(self, delivery_partner_id: str, days: int) -> dict[str, Any]:
-        if not delivery_partner_id or delivery_partner_id.strip() == "":
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="delivery_partner_id cannot be empty",
-                status_code=400,
-            )
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
+        did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
+        validate_days_range(days)
         detail = self.repository.get_delivery_partner_activity(
-            delivery_partner_id=delivery_partner_id.strip(),
+            delivery_partner_id=did,
             days=days,
         )
         if detail is None:
@@ -106,29 +86,14 @@ class DeliveryPartnerService:
         return detail
 
     def get_reports_delivery_partners(self, days: int, limit: int) -> list[dict[str, Any]]:
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
-        if limit < 1 or limit > 100:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="limit must be between 1 and 100",
-                status_code=400,
-            )
+        validate_days_range(days)
+        validate_limit(limit, max_limit=100)
         return self.repository.get_reports_delivery_partners(days=days, limit=limit)
 
     def set_delivery_partner_blocked(self, delivery_partner_id: str, *, blocked: bool) -> dict[str, Any]:
-        if not delivery_partner_id or delivery_partner_id.strip() == "":
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="delivery_partner_id cannot be empty",
-                status_code=400,
-            )
+        did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
         ok = self.repository.set_delivery_partner_blocked(
-            delivery_partner_id.strip(),
+            did,
             blocked=bool(blocked),
         )
         if not ok:
@@ -137,37 +102,27 @@ class DeliveryPartnerService:
                 message="Delivery partner not found",
                 status_code=404,
             )
-        return {"delivery_partner_id": delivery_partner_id.strip(), "is_blocked": bool(blocked)}
+        return {"delivery_partner_id": did, "is_blocked": bool(blocked)}
 
     def delete_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
-        if not delivery_partner_id or delivery_partner_id.strip() == "":
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="delivery_partner_id cannot be empty",
-                status_code=400,
-            )
-        ok = self.repository.soft_delete_delivery_partner(delivery_partner_id.strip())
+        did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
+        ok = self.repository.soft_delete_delivery_partner(did)
         if not ok:
             raise ApiError(
                 code=ErrorCode.RESOURCE_NOT_FOUND,
                 message="Delivery partner not found",
                 status_code=404,
             )
-        return {"delivery_partner_id": delivery_partner_id.strip(), "deleted": True}
+        return {"delivery_partner_id": did, "deleted": True}
 
     def restore_delivery_partner(self, delivery_partner_id: str) -> dict[str, Any]:
-        if not delivery_partner_id or delivery_partner_id.strip() == "":
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="delivery_partner_id cannot be empty",
-                status_code=400,
-            )
-        ok = self.repository.restore_delivery_partner(delivery_partner_id.strip())
+        did = validate_non_empty_str(delivery_partner_id, field_name="delivery_partner_id")
+        ok = self.repository.restore_delivery_partner(did)
         if not ok:
             raise ApiError(
                 code=ErrorCode.RESOURCE_NOT_FOUND,
                 message="Delivery partner not found",
                 status_code=404,
             )
-        return {"delivery_partner_id": delivery_partner_id.strip(), "restored": True}
+        return {"delivery_partner_id": did, "restored": True}
 

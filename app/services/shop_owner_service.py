@@ -12,6 +12,12 @@ from app.api.v1.schemas.shop_owner import (
 )
 from app.domain.enums.roles import Role
 from app.domain.repositories.shop_owner_repository import AbstractShopOwnerRepository
+from app.services.validation import (
+    validate_days_range,
+    validate_limit,
+    validate_page_and_limit,
+    validate_positive_id,
+)
 
 
 class ShopOwnerService:
@@ -29,18 +35,7 @@ class ShopOwnerService:
         phone: str | None = None,
         email: str | None = None,
     ) -> dict[str, Any]:
-        if page < 1:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="page must be >= 1",
-                status_code=400,
-            )
-        if limit < 1 or limit > 100:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="limit must be between 1 and 100",
-                status_code=400,
-            )
+        validate_page_and_limit(page, limit, max_limit=100)
 
         filters = SupermarketListFilters(
             name=name, user_id=user_id, shop_id=shop_id, phone=phone, email=email
@@ -61,12 +56,7 @@ class ShopOwnerService:
         return self.repository.get_shop_id_by_email(email)
 
     def get_supermarket_detail(self, user_id: int, role: Role) -> dict[str, Any]:
-        if user_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="user_id must be > 0",
-                status_code=400,
-            )
+        validate_positive_id(user_id, field_name="user_id")
 
         detail = self.repository.get_supermarket_detail_by_user_id(user_id=user_id)
         if detail is None:
@@ -98,18 +88,8 @@ class ShopOwnerService:
                 message="Not enough permissions",
                 status_code=403,
             )
-        if user_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="user_id must be > 0",
-                status_code=400,
-            )
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
+        validate_positive_id(user_id, field_name="user_id")
+        validate_days_range(days)
 
         payload = self.repository.get_shop_activity_by_user_id(user_id=user_id, days=days)
         if payload is None:
@@ -123,51 +103,26 @@ class ShopOwnerService:
     def get_reports_overview(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
             raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
+        validate_days_range(days)
         return self.repository.get_reports_overview(days=days)
 
     def get_reports_shops(self, role: Role, days: int, limit: int) -> list[dict[str, Any]]:
         if role != Role.SUPERADMIN:
             raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
-        if limit < 1 or limit > 100:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="limit must be between 1 and 100",
-                status_code=400,
-            )
+        validate_days_range(days)
+        validate_limit(limit, max_limit=100)
         return self.repository.get_reports_shops(days=days, limit=limit)
 
     def get_reports_funnel(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
             raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
+        validate_days_range(days)
         return self.repository.get_reports_funnel(days=days)
 
     def get_reports_finance(self, role: Role, days: int) -> dict[str, Any]:
         if role != Role.SUPERADMIN:
             raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
-        if days < 1 or days > 90:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="days must be between 1 and 90",
-                status_code=400,
-            )
+        validate_days_range(days)
         return self.repository.get_reports_finance(days=days)
 
     def create_supermarket(self, payload: SupermarketCreateRequest, role: Role) -> dict[str, Any]:
@@ -192,12 +147,7 @@ class ShopOwnerService:
                 message="Not enough permissions",
                 status_code=403,
             )
-        if user_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="user_id must be > 0",
-                status_code=400,
-            )
+        validate_positive_id(user_id, field_name="user_id")
 
         self.repository.update_supermarket(user_id=user_id, payload=payload)
         return self.get_supermarket_detail(user_id=user_id, role=role)
@@ -209,12 +159,7 @@ class ShopOwnerService:
                 message="Not enough permissions",
                 status_code=403,
             )
-        if user_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="user_id must be > 0",
-                status_code=400,
-            )
+        validate_positive_id(user_id, field_name="user_id")
 
         self.repository.soft_delete_supermarket(user_id=user_id)
         return {"deleted": True, "user_id": user_id}

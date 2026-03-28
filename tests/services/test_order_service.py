@@ -1,16 +1,14 @@
 from dataclasses import dataclass
 
 from app.api.exceptions.http_errors import ApiError
+from app.domain.exceptions import NotFoundError
 from app.services.order_service import OrderService
 
 
 @dataclass
 class _RepoStub:
-    def list_orders(self, page: int, page_size: int):
-        return []
-
-    def count_orders(self):
-        return 0
+    def list_orders_paginated(self, page: int, page_size: int):
+        return [], 0
 
     def get_by_id(self, order_id: int):
         return None
@@ -36,5 +34,5 @@ def test_get_order_not_found_raises():
     try:
         service.get_order(order_id=9999)
         assert False, "Expected ORDER_NOT_FOUND"
-    except ApiError as exc:
+    except NotFoundError as exc:
         assert exc.code == "ORDER_NOT_FOUND"

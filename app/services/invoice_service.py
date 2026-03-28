@@ -7,6 +7,7 @@ from typing import Any
 
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
+from app.domain.exceptions import NotFoundError
 from app.api.v1.schemas.subscription_invoice import (
     SubscriptionInvoiceCreate,
     SubscriptionInvoiceListItem,
@@ -16,6 +17,11 @@ from app.api.v1.schemas.subscription_invoice import (
 from app.domain.repositories.invoice_repository import AbstractInvoiceRepository
 from app.infrastructure.db.models.enums import InvoiceDocumentType, InvoiceStatus
 from app.infrastructure.db.models.subscription_invoice import SubscriptionInvoice
+from app.services.validation import (
+    validate_days_range,
+    validate_page_and_limit_invoice,
+    validate_positive_id,
+)
 
 
 @dataclass(frozen=True)
@@ -44,37 +50,17 @@ class InvoiceService:
         filters: dict[str, Any],
         order_by: list[tuple[str, str]] | None = None,
     ) -> tuple[list[SubscriptionInvoiceListItem], int]:
-        if page < 1:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="page must be >= 1",
-                status_code=400,
-            )
-        if limit < 1 or limit > 200:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="limit must be between 1 and 200",
-                status_code=400,
-            )
+        validate_page_and_limit_invoice(page, limit)
 
         rows, total = self.repository.list_invoices(page=page, limit=limit, filters=filters, order_by=order_by)
         items = [SubscriptionInvoiceListItem.model_validate(r) for r in rows]
         return items, total
 
     def get_invoice(self, invoice_id: int) -> SubscriptionInvoiceRead:
-        if invoice_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="invoice_id must be > 0",
-                status_code=400,
-            )
+        validate_positive_id(invoice_id, field_name="invoice_id")
         invoice = self.repository.get_by_id(invoice_id)
         if not invoice:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Invoice not found",
-                status_code=404,
-            )
+            raise NotFoundError("Invoice not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return SubscriptionInvoiceRead.model_validate(invoice)
 
     def _validate_amounts(self, payload: SubscriptionInvoiceCreate | SubscriptionInvoiceUpdate) -> None:
@@ -109,23 +95,11 @@ class InvoiceService:
     def _next_sequence(self, *, document_type: InvoiceDocumentType, now: datetime) -> int:
         prefix = "INV" if document_type == InvoiceDocumentType.INVOICE else "BILL"
         ym = now.strftime("%Y%m")
-        rows, _ = self.repository.list_invoices(
-            page=1,
-            limit=9999,
-            filters={"document_type": document_type, "search": f"{prefix}-{ym}-"},
-            order_by=[("invoice_number", "desc")],
+        best = self.repository.max_invoice_sequence_suffix(
+            document_type=document_type,
+            prefix=prefix,
+            ym=ym,
         )
-        best = 0
-        for row in rows:
-            parts = row.invoice_number.split("-")
-            if len(parts) != 3:
-                continue
-            if parts[0] != prefix or parts[1] != ym:
-                continue
-            try:
-                best = max(best, int(parts[2]))
-            except ValueError:
-                continue
         return best + 1
 
     def create_system_invoice(
@@ -206,19 +180,10 @@ class InvoiceService:
         return SubscriptionInvoiceRead.model_validate(updated)
 
     def _require_invoice(self, invoice_id: int) -> SubscriptionInvoice:
-        if invoice_id <= 0:
-            raise ApiError(
-                code=ErrorCode.VALIDATION_ERROR,
-                message="invoice_id must be > 0",
-                status_code=400,
-            )
+        validate_positive_id(invoice_id, field_name="invoice_id")
         invoice = self.repository.get_by_id(invoice_id)
         if not invoice:
-            raise ApiError(
-                code=ErrorCode.RESOURCE_NOT_FOUND,
-                message="Invoice not found",
-                status_code=404,
-            )
+            raise NotFoundError("Invoice not found", code=ErrorCode.RESOURCE_NOT_FOUND)
         return invoice
 
     def update_status(
@@ -420,8 +385,7 @@ class InvoiceService:
         return {"imported": imported, "skipped": skipped}
 
     def get_accounts_overview(self, *, days: int, shop_id: str | None = None) -> dict[str, Any]:
-        if days < 1 or days > 365:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="days must be between 1 and 365", status_code=400)
+        validate_days_range(days, min_d=1, max_d=365)
         return self.repository.get_accounts_overview(days=days, shop_id=shop_id)
 
     def _ensure_valid_transition(self, current: InvoiceStatus, new: InvoiceStatus) -> None:

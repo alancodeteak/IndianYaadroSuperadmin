@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from app.api.v1.schemas.subscription_invoice import SubscriptionInvoiceCreate, SubscriptionInvoiceUpdate
+from app.infrastructure.db.models.enums import InvoiceDocumentType
 from app.infrastructure.db.models.subscription import Subscription
 from app.infrastructure.db.models.subscription_invoice import SubscriptionInvoice
 
@@ -28,6 +29,16 @@ class AbstractInvoiceRepository(ABC):
     @abstractmethod
     def get_by_number(self, invoice_number: str) -> SubscriptionInvoice | None:
         raise NotImplementedError
+
+    @abstractmethod
+    def max_invoice_sequence_suffix(
+        self,
+        *,
+        document_type: InvoiceDocumentType,
+        prefix: str,
+        ym: str,
+    ) -> int:
+        """Highest numeric suffix for PREFIX-YYYYMM-#### numbers, or 0 if none."""
 
     @abstractmethod
     def create_invoice(self, payload: SubscriptionInvoiceCreate) -> SubscriptionInvoice:

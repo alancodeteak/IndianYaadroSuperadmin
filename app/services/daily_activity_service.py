@@ -6,6 +6,7 @@ from typing import Any
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
 from app.repositories.daily_activity_repository import DailyActivityRepository
+from app.services.validation import validate_days_range, validate_page_and_limit_daily
 
 
 class DailyActivityService:
@@ -31,10 +32,7 @@ class DailyActivityService:
                 message=f"sort must be one of: {', '.join(sorted(allowed_sort))}",
                 status_code=400,
             )
-        if page < 1:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="page must be >= 1", status_code=400)
-        if limit < 1 or limit > 200:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="limit must be 1-200", status_code=400)
+        validate_page_and_limit_daily(page, limit)
         return self.repository.list_shops(
             target_date=target_date,
             page=page,
@@ -44,7 +42,6 @@ class DailyActivityService:
         )
 
     def get_trends(self, *, days: int) -> list[dict[str, Any]]:
-        if days < 1 or days > 90:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="days must be 1-90", status_code=400)
+        validate_days_range(days)
         return self.repository.get_trends(days=days)
 

@@ -12,18 +12,21 @@ class OrderRepository(AbstractOrderRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def list_orders(self, page: int, page_size: int) -> list[Order]:
+    def list_orders_paginated(self, page: int, page_size: int) -> tuple[list[Order], int]:
+        total_sq = select(func.count()).select_from(Order).scalar_subquery()
         stmt = (
-            select(Order)
+            select(Order, total_sq.label("_total"))
             .order_by(Order.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        return list(self.db.scalars(stmt).all())
-
-    def count_orders(self) -> int:
-        stmt = select(func.count(Order.order_id))
-        return int(self.db.scalar(stmt) or 0)
+        rows = list(self.db.execute(stmt).all())
+        if not rows:
+            total = int(self.db.scalar(select(func.count()).select_from(Order)) or 0)
+            return [], total
+        items = [r[0] for r in rows]
+        total = int(rows[0][1])
+        return items, total
 
     def get_by_id(self, order_id: int) -> Order | None:
         return self.db.get(Order, order_id)
