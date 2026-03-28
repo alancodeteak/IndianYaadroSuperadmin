@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/admin/daily-activity", tags=["daily-activity"
 
 
 @router.get("/overview", response_model=dict[str, Any])
-async def get_daily_activity_overview(
+def get_daily_activity_overview(
     target_date: date = Query(default_factory=date.today),
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: DailyActivityService = Depends(get_daily_activity_service),
@@ -25,7 +25,7 @@ async def get_daily_activity_overview(
 
 
 @router.get("/shops", response_model=dict[str, Any])
-async def list_daily_activity_shops(
+def list_daily_activity_shops(
     target_date: date = Query(default_factory=date.today),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=200),
@@ -50,7 +50,7 @@ async def list_daily_activity_shops(
 
 
 @router.get("/trends", response_model=dict[str, Any])
-async def get_daily_activity_trends(
+def get_daily_activity_trends(
     days: int = Query(default=7, ge=1, le=90),
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: DailyActivityService = Depends(get_daily_activity_service),

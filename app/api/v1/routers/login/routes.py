@@ -20,7 +20,7 @@ async def send_scoped_otp(
 
 
 @router.post("/verify-otp")
-async def verify_scoped_otp(
+def verify_scoped_otp(
     payload: ScopedVerifyOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
     session = service.verify_otp(

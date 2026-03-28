@@ -11,7 +11,7 @@ router = APIRouter(prefix="/supermarkets", tags=["supermarkets"])
 
 
 @router.post("/")
-async def create_supermarket(
+def create_supermarket(
     payload: SupermarketCreateRequest,
     current_user: CurrentUser = Depends(require_authenticated),
     service: ShopOwnerService = Depends(get_shop_owner_service),
@@ -27,7 +27,7 @@ async def create_supermarket(
 
 
 @router.get("/")
-async def list_supermarkets(
+def list_supermarkets(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     name: str | None = Query(default=None),
@@ -68,7 +68,7 @@ async def list_supermarkets(
 
 
 @router.get("/{user_id}")
-async def get_supermarket_detail(
+def get_supermarket_detail(
     user_id: int,
     current_user: CurrentUser = Depends(require_authenticated),
     service: ShopOwnerService = Depends(get_shop_owner_service),
@@ -84,7 +84,7 @@ async def get_supermarket_detail(
 
 
 @router.patch("/{user_id}")
-async def update_supermarket(
+def update_supermarket(
     user_id: int,
     payload: SupermarketUpdateRequest,
     current_user: CurrentUser = Depends(require_authenticated),
@@ -101,7 +101,7 @@ async def update_supermarket(
 
 
 @router.delete("/{user_id}")
-async def delete_supermarket(
+def delete_supermarket(
     user_id: int,
     current_user: CurrentUser = Depends(require_authenticated),
     service: ShopOwnerService = Depends(get_shop_owner_service),

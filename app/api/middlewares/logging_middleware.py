@@ -11,11 +11,18 @@ log = get_logger(__name__)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Single timing pass per request: structured JSON log + X-Process-Time-Ms response header.
+    (Avoids duplicate perf_counter work across multiple middlewares.)
+    """
+
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
         response = await call_next(request)
         elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
         request_id = getattr(request.state, "request_id", None)
+
+        response.headers["X-Process-Time-Ms"] = str(elapsed_ms)
 
         log.info(
             "http_request",
@@ -28,4 +35,3 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             },
         )
         return response
-

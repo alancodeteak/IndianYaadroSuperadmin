@@ -12,7 +12,7 @@ router = APIRouter(
 
 
 @router.get("/", response_model=dict)
-async def list_orders(
+def list_orders(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     service: OrderService = Depends(get_order_service),
@@ -29,19 +29,19 @@ async def list_orders(
 
 
 @router.get("/{order_id}", response_model=dict)
-async def get_order(order_id: int, service: OrderService = Depends(get_order_service)):
+def get_order(order_id: int, service: OrderService = Depends(get_order_service)):
     row = service.get_order(order_id)
     return {"data": OrderRead.model_validate(row).model_dump(), "meta": None}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=dict)
-async def create_order(payload: OrderCreate, service: OrderService = Depends(get_order_service)):
+def create_order(payload: OrderCreate, service: OrderService = Depends(get_order_service)):
     created = service.create_order(payload)
     return {"data": OrderRead.model_validate(created).model_dump(), "meta": None}
 
 
 @router.patch("/{order_id}", response_model=dict)
-async def patch_order(
+def patch_order(
     order_id: int,
     payload: OrderUpdate,
     service: OrderService = Depends(get_order_service),

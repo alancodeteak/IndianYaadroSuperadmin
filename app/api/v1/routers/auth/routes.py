@@ -18,7 +18,7 @@ async def send_otp(payload: SendOTPRequest, service: AuthService = Depends(get_a
 
 
 @router.post("/verify-otp")
-async def verify_otp(
+def verify_otp(
     payload: VerifyOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
     session = service.verify_admin_otp(email=str(payload.email), otp_code=payload.otp_code)

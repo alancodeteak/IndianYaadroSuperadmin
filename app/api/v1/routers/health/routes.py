@@ -17,17 +17,17 @@ router = APIRouter(tags=["internal"])
 
 
 @router.get("/health")
-async def health() -> dict:
+def health() -> dict:
     return {"data": {"status": "ok"}, "meta": None}
 
 
 @router.get("/health/live")
-async def health_live() -> dict:
+def health_live() -> dict:
     return {"data": {"status": "alive"}, "meta": None}
 
 
 @router.get("/health/ready")
-async def health_ready() -> dict:
+def health_ready() -> dict:
     checks = {"database": _check_database()}
     ready = all(checks.values())
     return {
@@ -37,7 +37,7 @@ async def health_ready() -> dict:
 
 
 @router.get("/health/full")
-async def health_full() -> dict:
+def health_full() -> dict:
     settings = get_settings()
     env = settings.ENVIRONMENT.lower()
     is_prod = env in {"production", "prod"}

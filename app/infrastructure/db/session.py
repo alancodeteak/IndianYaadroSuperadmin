@@ -36,7 +36,30 @@ def _configure_enum_storage() -> None:
 
 
 _configure_enum_storage()
-engine = create_engine(_database_url(), future=True)
+
+
+def _engine_args() -> dict:
+    settings = get_settings()
+    url = _database_url()
+    common = {
+        "future": True,
+        "pool_pre_ping": True,
+        "pool_recycle": int(settings.DB_POOL_RECYCLE_SECONDS),
+    }
+    if url.startswith("sqlite"):
+        # SQLite: use NullPool semantics via connect_args; avoid multi-threaded pool assumptions.
+        return {
+            **common,
+            "connect_args": {"check_same_thread": False},
+        }
+    return {
+        **common,
+        "pool_size": int(settings.DB_POOL_SIZE),
+        "max_overflow": int(settings.DB_MAX_OVERFLOW),
+    }
+
+
+engine = create_engine(_database_url(), **_engine_args())
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
 
@@ -46,4 +69,3 @@ def get_db_session() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-

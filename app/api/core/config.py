@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     DATABASE_URL: str = "sqlite+pysqlite:///./superadmin.db"
+    # PostgreSQL connection pool (ignored for SQLite URL schemes)
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    # When True, startup fails if DB ping fails (recommended for production).
+    FAIL_FAST_ON_DB_ERROR: bool = False
+    # Compress large JSON/text responses (Starlette GZip middleware).
+    ENABLE_RESPONSE_GZIP: bool = True
+    GZIP_MINIMUM_SIZE: int = 1000
     SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

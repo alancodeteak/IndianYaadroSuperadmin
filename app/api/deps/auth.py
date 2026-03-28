@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from starlette import status
 
 from app.api.core.security import decode_token
@@ -37,9 +37,10 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
     return parts[1]
 
 
-async def get_current_user(
-    authorization: Optional[str] = Header(default=None, alias="Authorization"),
-) -> CurrentUser:
+def build_current_user_from_authorization_header(authorization: str) -> CurrentUser:
+    """
+    Single JWT decode + validation path used by OptionalAuthMiddleware and get_current_user.
+    """
     token = _extract_bearer_token(authorization)
 
     payload: dict[str, Any] = decode_token(token)
@@ -80,6 +81,27 @@ async def get_current_user(
     return CurrentUser(user_id=str(user_id), role=role)
 
 
+async def get_current_user(
+    request: Request,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> CurrentUser:
+    """
+    Reuses request.state.current_user when OptionalAuthMiddleware already decoded the same request.
+    Avoids a second JWT decode on the hot path.
+    """
+    if authorization:
+        cached = getattr(request.state, "current_user", None)
+        if cached is not None:
+            return cached
+    if not authorization:
+        raise ApiError(
+            code=ErrorCode.UNAUTHENTICATED,
+            message="Missing Authorization header",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    return build_current_user_from_authorization_header(authorization)
+
+
 def require_roles(*allowed_roles: Role):
     async def _checker(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if current_user.role not in allowed_roles:
@@ -96,4 +118,3 @@ def require_roles(*allowed_roles: Role):
 
 async def require_authenticated(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     return current_user
-

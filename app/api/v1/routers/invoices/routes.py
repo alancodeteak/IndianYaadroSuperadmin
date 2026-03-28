@@ -31,7 +31,7 @@ class LegacyImportPayload(BaseModel):
 
 
 @router.get("/overview", response_model=dict[str, Any])
-async def accounts_overview_admin(
+def accounts_overview_admin(
     days: int = Query(default=30, ge=1, le=365),
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -45,7 +45,7 @@ async def accounts_overview_admin(
     "",
     response_model=dict[str, Any],
 )
-async def list_invoices_admin(
+def list_invoices_admin(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=200),
     shop_id: str | None = None,
@@ -96,7 +96,7 @@ async def list_invoices_admin(
     "/{invoice_id}",
     response_model=dict[str, Any],
 )
-async def get_invoice_admin(
+def get_invoice_admin(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -110,7 +110,7 @@ async def get_invoice_admin(
     "/create-manual",
     response_model=dict[str, Any],
 )
-async def create_manual_invoice_admin(
+def create_manual_invoice_admin(
     payload: SubscriptionInvoiceCreate,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -124,7 +124,7 @@ async def create_manual_invoice_admin(
     "/{invoice_id}",
     response_model=dict[str, Any],
 )
-async def update_invoice_admin(
+def update_invoice_admin(
     invoice_id: int,
     payload: SubscriptionInvoiceUpdate,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
@@ -139,7 +139,7 @@ async def update_invoice_admin(
     "/{invoice_id}/status",
     response_model=dict[str, Any],
 )
-async def update_invoice_status_admin(
+def update_invoice_status_admin(
     invoice_id: int,
     new_status: InvoiceStatus,
     paid_at: datetime | None = None,
@@ -161,7 +161,7 @@ async def update_invoice_status_admin(
     "/monthly-summary",
     response_model=dict[str, Any],
 )
-async def monthly_summary_admin(
+def monthly_summary_admin(
     year: int,
     month: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
@@ -173,7 +173,7 @@ async def monthly_summary_admin(
 
 
 @router.post("/generate-monthly", response_model=dict[str, Any])
-async def generate_monthly_now_admin(
+def generate_monthly_now_admin(
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
 ) -> dict[str, Any]:
@@ -184,7 +184,7 @@ async def generate_monthly_now_admin(
 
 
 @router.post("/generate-monthly-for-month", response_model=dict[str, Any])
-async def generate_monthly_for_month_admin(
+def generate_monthly_for_month_admin(
     year: int,
     month: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
@@ -197,7 +197,7 @@ async def generate_monthly_for_month_admin(
 
 
 @router.post("/run-status-automation", response_model=dict[str, Any])
-async def run_status_automation_admin(
+def run_status_automation_admin(
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
 ) -> dict[str, Any]:
@@ -206,7 +206,7 @@ async def run_status_automation_admin(
 
 
 @router.post("/{invoice_id}/retry-bill", response_model=dict[str, Any])
-async def retry_bill_admin(
+def retry_bill_admin(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -220,7 +220,7 @@ async def retry_bill_admin(
     "/{invoice_id}/send-email",
     response_model=dict[str, Any],
 )
-async def send_invoice_email_admin(
+def send_invoice_email_admin(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
 ) -> dict[str, Any]:
@@ -236,7 +236,7 @@ async def send_invoice_email_admin(
 
 
 @router.post("/import-legacy", response_model=dict[str, Any])
-async def import_legacy_admin(
+def import_legacy_admin(
     payload: LegacyImportPayload,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -250,7 +250,7 @@ async def import_legacy_admin(
     "/{invoice_id}/send-followup-email",
     response_model=dict[str, Any],
 )
-async def send_invoice_followup_email_admin(
+def send_invoice_followup_email_admin(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
 ) -> dict[str, Any]:
@@ -268,7 +268,7 @@ async def send_invoice_followup_email_admin(
     "/{invoice_id}/download",
     response_model=dict[str, Any],
 )
-async def download_invoice_admin(
+def download_invoice_admin(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.SUPERADMIN)),
 ) -> dict[str, Any]:
@@ -309,7 +309,7 @@ def _empty_accounts_overview(days: int) -> dict[str, Any]:
 
 
 @portal_router.get("", response_model=dict[str, Any])
-async def list_invoices_portal(
+def list_invoices_portal(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=200),
     status: InvoiceStatus | None = None,
@@ -361,7 +361,7 @@ async def list_invoices_portal(
 
 
 @portal_router.get("/overview", response_model=dict[str, Any])
-async def accounts_overview_portal(
+def accounts_overview_portal(
     days: int = Query(default=30, ge=1, le=365),
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -375,7 +375,7 @@ async def accounts_overview_portal(
 
 
 @portal_router.get("/{invoice_id}", response_model=dict[str, Any])
-async def get_invoice_portal(
+def get_invoice_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -389,7 +389,7 @@ async def get_invoice_portal(
 
 
 @portal_router.get("/{invoice_id}/download", response_model=dict[str, Any])
-async def download_invoice_portal(
+def download_invoice_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -410,7 +410,7 @@ async def download_invoice_portal(
 
 
 @portal_router.post("/create-manual", response_model=dict[str, Any])
-async def create_manual_invoice_portal(
+def create_manual_invoice_portal(
     payload: SubscriptionInvoiceCreate,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -424,7 +424,7 @@ async def create_manual_invoice_portal(
 
 
 @portal_router.put("/{invoice_id}", response_model=dict[str, Any])
-async def update_invoice_portal(
+def update_invoice_portal(
     invoice_id: int,
     payload: SubscriptionInvoiceUpdate,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
@@ -440,7 +440,7 @@ async def update_invoice_portal(
 
 
 @portal_router.patch("/{invoice_id}/status", response_model=dict[str, Any])
-async def update_invoice_status_portal(
+def update_invoice_status_portal(
     invoice_id: int,
     new_status: InvoiceStatus,
     paid_at: datetime | None = None,
@@ -463,7 +463,7 @@ async def update_invoice_status_portal(
 
 
 @portal_router.post("/{invoice_id}/retry-bill", response_model=dict[str, Any])
-async def retry_bill_portal(
+def retry_bill_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -478,7 +478,7 @@ async def retry_bill_portal(
 
 
 @portal_router.post("/{invoice_id}/send-email", response_model=dict[str, Any])
-async def send_invoice_email_portal(
+def send_invoice_email_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
@@ -492,7 +492,7 @@ async def send_invoice_email_portal(
 
 
 @portal_router.post("/{invoice_id}/send-followup-email", response_model=dict[str, Any])
-async def send_followup_email_portal(
+def send_followup_email_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),

@@ -16,12 +16,12 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/")
-async def analytics_root() -> dict:
+def analytics_root() -> dict:
     return {"data": {"message": "Analytics API router ready"}, "meta": None}
 
 
 @router.get("/shops/{user_id}/activity")
-async def get_shop_activity(
+def get_shop_activity(
     user_id: int,
     days: int = Query(default=7, ge=1, le=90),
     current_user: CurrentUser = Depends(require_authenticated),
@@ -38,7 +38,7 @@ async def get_shop_activity(
 
 
 @router.get("/delivery-partners/{delivery_partner_id}/activity")
-async def get_delivery_partner_activity(
+def get_delivery_partner_activity(
     delivery_partner_id: str,
     days: int = Query(default=7, ge=1, le=90),
     current_user: CurrentUser = Depends(require_authenticated),
@@ -55,7 +55,7 @@ async def get_delivery_partner_activity(
 
 
 @router.get("/reports/overview")
-async def reports_overview(
+def reports_overview(
     days: int = Query(default=30, ge=1, le=90),
     current_user: CurrentUser = Depends(require_authenticated),
     shop_service: ShopOwnerService = Depends(get_shop_owner_service),
@@ -65,7 +65,7 @@ async def reports_overview(
 
 
 @router.get("/reports/shops")
-async def reports_shops(
+def reports_shops(
     days: int = Query(default=30, ge=1, le=90),
     limit: int = Query(default=10, ge=1, le=100),
     current_user: CurrentUser = Depends(require_authenticated),
@@ -76,7 +76,7 @@ async def reports_shops(
 
 
 @router.get("/reports/delivery-partners")
-async def reports_delivery_partners(
+def reports_delivery_partners(
     days: int = Query(default=30, ge=1, le=90),
     limit: int = Query(default=10, ge=1, le=100),
     current_user: CurrentUser = Depends(require_authenticated),
@@ -89,7 +89,7 @@ async def reports_delivery_partners(
 
 
 @router.get("/reports/funnel")
-async def reports_funnel(
+def reports_funnel(
     days: int = Query(default=30, ge=1, le=90),
     current_user: CurrentUser = Depends(require_authenticated),
     shop_service: ShopOwnerService = Depends(get_shop_owner_service),
@@ -99,7 +99,7 @@ async def reports_funnel(
 
 
 @router.get("/reports/finance")
-async def reports_finance(
+def reports_finance(
     days: int = Query(default=30, ge=1, le=90),
     current_user: CurrentUser = Depends(require_authenticated),
     shop_service: ShopOwnerService = Depends(get_shop_owner_service),

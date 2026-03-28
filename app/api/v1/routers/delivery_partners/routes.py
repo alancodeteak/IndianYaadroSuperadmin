@@ -11,7 +11,7 @@ router = APIRouter(prefix="/delivery-partners", tags=["delivery-partners"])
 
 
 @router.get("/")
-async def list_delivery_partners(
+def list_delivery_partners(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     include_deleted: bool = Query(default=True),
@@ -47,7 +47,7 @@ async def list_delivery_partners(
 
 
 @router.get("/{delivery_partner_id}")
-async def get_delivery_partner_detail(
+def get_delivery_partner_detail(
     delivery_partner_id: str,
     current_user: CurrentUser = Depends(require_authenticated),
     service: DeliveryPartnerService = Depends(get_delivery_partner_service),
@@ -63,7 +63,7 @@ async def get_delivery_partner_detail(
 
 
 @router.patch("/{delivery_partner_id}/block")
-async def block_delivery_partner(
+def block_delivery_partner(
     delivery_partner_id: str,
     payload: DeliveryPartnerBlockRequest,
     current_user: CurrentUser = Depends(require_authenticated),
@@ -80,7 +80,7 @@ async def block_delivery_partner(
 
 
 @router.delete("/{delivery_partner_id}")
-async def delete_delivery_partner(
+def delete_delivery_partner(
     delivery_partner_id: str,
     current_user: CurrentUser = Depends(require_authenticated),
     service: DeliveryPartnerService = Depends(get_delivery_partner_service),
@@ -96,7 +96,7 @@ async def delete_delivery_partner(
 
 
 @router.patch("/{delivery_partner_id}/restore")
-async def restore_delivery_partner(
+def restore_delivery_partner(
     delivery_partner_id: str,
     current_user: CurrentUser = Depends(require_authenticated),
     service: DeliveryPartnerService = Depends(get_delivery_partner_service),

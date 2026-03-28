@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict, deque
+from collections import deque
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -13,11 +13,12 @@ from app.api.core.config import get_settings
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Lightweight in-memory fixed-window limiter.
-    Suitable for single-process environments and local/dev usage.
+    Fixed-window limiter with bounded key cardinality (FIFO eviction of oldest key).
+    No Redis; suitable for single-process / moderate worker counts.
     """
 
-    _hits: dict[str, deque[float]] = defaultdict(deque)
+    _hits: dict[str, deque[float]] = {}
+    _MAX_KEYS = 10_000
 
     async def dispatch(self, request: Request, call_next):
         settings = get_settings()
@@ -29,7 +30,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.time()
         window = settings.RATE_LIMIT_WINDOW_SECONDS
         limit = settings.RATE_LIMIT_REQUESTS
-        bucket = self._hits[key]
+
+        if key not in self._hits and len(self._hits) >= self._MAX_KEYS:
+            oldest_key = next(iter(self._hits))
+            del self._hits[oldest_key]
+
+        bucket = self._hits.setdefault(key, deque())
 
         while bucket and bucket[0] <= now - window:
             bucket.popleft()
@@ -52,4 +58,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         bucket.append(now)
         return await call_next(request)
-

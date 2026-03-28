@@ -4,13 +4,20 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import case, distinct, func, select
+from sqlalchemy import String, case, cast, distinct, func, literal, select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.db.models.enums import OrderStatus
 from app.infrastructure.db.models.order import Order
 from app.infrastructure.db.models.shop_owner import ShopOwner
 from app.infrastructure.db.models.subscription import Subscription
+
+# Postgres order_status enum labels are Python enum values (e.g. "Delivered"); ORM == Enum binds member names.
+_OS_DELIVERED = OrderStatus.DELIVERED.value
+
+
+def _order_status_is(value: str):
+    return cast(Order.order_status, String) == literal(value, type_=String())
 
 
 def _utc_now() -> datetime:
@@ -201,7 +208,7 @@ class SalesActivityRepository:
                 func.count(distinct(ShopOwner.shop_id)).label("shops"),
                 func.count(Order.order_id).label("orders_first_30d"),
                 func.coalesce(
-                    func.sum(case((Order.order_status == OrderStatus.DELIVERED, Order.total_amount), else_=0)),
+                    func.sum(case((_order_status_is(_OS_DELIVERED), Order.total_amount), else_=0)),
                     0,
                 ).label("delivered_revenue_first_30d"),
                 func.sum(

@@ -20,7 +20,7 @@ async def send_portal_otp(
 
 
 @router.post("/verify-otp")
-async def verify_portal_otp(
+def verify_portal_otp(
     payload: VerifyOTPRequest, service: AuthService = Depends(get_auth_service)
 ) -> dict:
     session = service.verify_portal_otp(email=str(payload.email), otp_code=payload.otp_code)

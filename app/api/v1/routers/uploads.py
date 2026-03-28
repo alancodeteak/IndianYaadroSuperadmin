@@ -14,9 +14,31 @@ from app.api.core.config import get_settings
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
+_READ_CHUNK = 64 * 1024
+
+
+async def _read_upload_bytes_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Stream read in chunks; stop early if size exceeds max (reduces peak allocation vs single read())."""
+    parts: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="File too large",
+                status_code=400,
+                details={"max_bytes": max_bytes},
+            )
+        parts.append(chunk)
+    return b"".join(parts)
+
 
 @router.post("/presign", response_model=PresignUploadResponse)
-async def presign_upload(
+def presign_upload(
     payload: PresignUploadRequest,
     current_user: CurrentUser = Depends(require_authenticated),
 ) -> PresignUploadResponse:
@@ -94,14 +116,8 @@ async def upload_shop_owner_photo_via_backend(
     safe_name = file.filename.strip().replace("/", "_")
     key = f"shop_owners/{user_id}/{category.strip()}/{uuid4().hex}-{safe_name}"
 
-    data = await file.read()
-    if len(data) > int(s.S3_MAX_FILE_SIZE):
-        raise ApiError(
-            code=ErrorCode.VALIDATION_ERROR,
-            message="File too large",
-            status_code=400,
-            details={"max_bytes": int(s.S3_MAX_FILE_SIZE)},
-        )
+    max_b = int(s.S3_MAX_FILE_SIZE)
+    data = await _read_upload_bytes_capped(file, max_b)
 
     try:
         put_object(purpose="shop_owner", key=key, body=data, content_type=content_type)
@@ -122,4 +138,3 @@ async def upload_shop_owner_photo_via_backend(
         download_url=download_url,
         expires_in=int(s.S3_PRESIGNED_URL_EXPIRY),
     )
-
