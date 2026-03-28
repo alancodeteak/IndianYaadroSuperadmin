@@ -529,7 +529,9 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         )
         active_partners = int(
             self.db.scalar(
-                select(func.count(DeliveryPartner.id)).where(DeliveryPartner.is_deleted.is_(False))
+                select(func.count(DeliveryPartner.delivery_partner_id)).where(
+                    DeliveryPartner.is_deleted.is_(False)
+                )
             )
             or 0
         )
