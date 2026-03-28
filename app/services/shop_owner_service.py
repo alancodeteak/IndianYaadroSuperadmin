@@ -27,6 +27,7 @@ class ShopOwnerService:
         user_id: int | None = None,
         shop_id: str | None = None,
         phone: str | None = None,
+        email: str | None = None,
     ) -> dict[str, Any]:
         if page < 1:
             raise ApiError(
@@ -41,7 +42,9 @@ class ShopOwnerService:
                 status_code=400,
             )
 
-        filters = SupermarketListFilters(name=name, user_id=user_id, shop_id=shop_id, phone=phone)
+        filters = SupermarketListFilters(
+            name=name, user_id=user_id, shop_id=shop_id, phone=phone, email=email
+        )
         rows, total = self.repository.list_supermarkets(page=page, limit=limit, filters=filters)
         total_pages = ceil(total / limit) if total > 0 else 1
         return {
@@ -53,6 +56,9 @@ class ShopOwnerService:
                 "totalPages": total_pages,
             },
         }
+
+    def get_shop_id_for_portal_email(self, email: str) -> str | None:
+        return self.repository.get_shop_id_by_email(email)
 
     def get_supermarket_detail(self, user_id: int, role: Role) -> dict[str, Any]:
         if user_id <= 0:
@@ -171,6 +177,8 @@ class ShopOwnerService:
                 message="Not enough permissions",
                 status_code=403,
             )
+        # Portal users cannot set blocked/suspended at create time: repository always inserts ACTIVE.
+        # Admin-only PATCH can change status / block flags.
 
         self.repository.create_supermarket(payload)
         return self.get_supermarket_detail(user_id=payload.user_id, role=role)

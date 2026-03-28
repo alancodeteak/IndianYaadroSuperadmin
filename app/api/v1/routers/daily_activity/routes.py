@@ -42,7 +42,11 @@ async def list_daily_activity_shops(
         search=search,
         sort=sort,
     )
-    return {"data": items, "meta": {"page": page, "limit": limit, "total": total}}
+    total_pages = max(1, (total + limit - 1) // limit) if total else 1
+    return {
+        "data": items,
+        "meta": {"page": page, "limit": limit, "total": total, "total_pages": total_pages},
+    }
 
 
 @router.get("/trends", response_model=dict[str, Any])

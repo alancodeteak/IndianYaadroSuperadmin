@@ -43,14 +43,27 @@ async def list_supermarkets(
             message="Not enough permissions",
             status_code=403,
         )
-    payload = service.list_supermarkets(
-        page=page,
-        limit=limit,
-        name=name,
-        user_id=user_id,
-        shop_id=shop_id,
-        phone=phone,
-    )
+    # Portal JWT subject is the login email; scope the directory to that shop only.
+    if current_user.role == Role.PORTAL_USER:
+        payload = service.list_supermarkets(
+            page=page,
+            limit=limit,
+            name=None,
+            user_id=None,
+            shop_id=None,
+            phone=None,
+            email=current_user.user_id,
+        )
+    else:
+        payload = service.list_supermarkets(
+            page=page,
+            limit=limit,
+            name=name,
+            user_id=user_id,
+            shop_id=shop_id,
+            phone=phone,
+            email=None,
+        )
     return {"data": payload["data"], "meta": payload["meta"]}
 
 

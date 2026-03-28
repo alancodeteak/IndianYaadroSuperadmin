@@ -18,6 +18,10 @@ class AbstractShopOwnerRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_shop_id_by_email(self, email: str) -> str | None:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_supermarket_detail_by_user_id(self, user_id: int) -> dict[str, Any] | None:
         raise NotImplementedError
 

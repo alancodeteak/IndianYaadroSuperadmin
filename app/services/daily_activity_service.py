@@ -24,6 +24,13 @@ class DailyActivityService:
         search: str | None = None,
         sort: str = "revenue_desc",
     ) -> tuple[list[dict[str, Any]], int]:
+        allowed_sort = {"revenue_desc", "orders_desc", "name_asc"}
+        if sort not in allowed_sort:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                message=f"sort must be one of: {', '.join(sorted(allowed_sort))}",
+                status_code=400,
+            )
         if page < 1:
             raise ApiError(code=ErrorCode.VALIDATION_ERROR, message="page must be >= 1", status_code=400)
         if limit < 1 or limit > 200:

@@ -23,18 +23,24 @@ class _ShopOwnerServiceStub:
         user_id: int | None = None,
         shop_id: str | None = None,
         phone: str | None = None,
+        email: str | None = None,
     ):
         assert isinstance(page, int)
         assert isinstance(limit, int)
-        # Validate filter wiring from router -> service.
-        if name is not None:
-            assert name == "super"
-        if user_id is not None:
-            assert user_id == 101
-        if shop_id is not None:
-            assert shop_id == "SHOP001"
-        if phone is not None:
-            assert phone == "9999999999"
+        # Portal list is scoped by login email (JWT sub); query filters are ignored.
+        if email is not None:
+            assert email == "portal-1"
+            assert name is None and user_id is None and shop_id is None and phone is None
+        else:
+            # Validate filter wiring from router -> service (superadmin).
+            if name is not None:
+                assert name == "super"
+            if user_id is not None:
+                assert user_id == 101
+            if shop_id is not None:
+                assert shop_id == "SHOP001"
+            if phone is not None:
+                assert phone == "9999999999"
         return {
             "data": [
                 {
@@ -132,7 +138,7 @@ def test_supermarkets_list_success_for_portal_user():
 
 def test_supermarkets_list_supports_search_filters():
     app.dependency_overrides[require_authenticated] = lambda: _UserStub(
-        user_id="portal-1", role=Role.PORTAL_USER
+        user_id="admin-1", role=Role.SUPERADMIN
     )
     app.dependency_overrides[get_shop_owner_service] = lambda: _ShopOwnerServiceStub()
     client = TestClient(app)

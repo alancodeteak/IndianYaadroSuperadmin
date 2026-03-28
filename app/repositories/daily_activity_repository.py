@@ -3,12 +3,21 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import case, distinct, func, select
+from sqlalchemy import String, case, cast, distinct, func, literal, select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.db.models.enums import OrderStatus
 from app.infrastructure.db.models.order import Order
 from app.infrastructure.db.models.shop_owner import ShopOwner
+
+# Postgres enum labels match Python enum *values* ("Delivered", "cancelled", …). Comparing the ORM
+# column to plain strings still gets coerced to Python Enum and binds as member names (e.g. DELIVERED),
+# which Postgres rejects — compare as text + literal instead.
+_OS_DELIVERED = OrderStatus.DELIVERED.value
+
+
+def _order_status_is(value: str):
+    return cast(Order.order_status, String) == literal(value, type_=String())
 
 
 def _day_bounds(target_date: date, tz: timezone = timezone.utc) -> tuple[datetime, datetime]:
@@ -30,7 +39,7 @@ class DailyActivityRepository:
         total_orders = int(self.db.scalar(total_orders_stmt) or 0)
 
         delivered_revenue_stmt = select(func.coalesce(func.sum(Order.total_amount), 0)).where(
-            *base, Order.order_status == OrderStatus.DELIVERED
+            *base, _order_status_is(_OS_DELIVERED)
         )
         delivered_revenue = float(self.db.scalar(delivered_revenue_stmt) or 0)
 
@@ -83,84 +92,70 @@ class DailyActivityRepository:
         sort: str = "revenue_desc",
         tz: timezone = timezone.utc,
     ) -> tuple[list[dict[str, Any]], int]:
+        """All supermarkets with shop record status; order stats for the day (zeros if none)."""
         start, end = _day_bounds(target_date, tz)
 
-        base = [Order.is_deleted.is_(False), Order.created_at >= start, Order.created_at < end]
+        order_filters = [
+            Order.is_deleted.is_(False),
+            Order.created_at >= start,
+            Order.created_at < end,
+        ]
+
+        total_orders = func.count(Order.order_id).label("total_orders")
+        total_revenue = func.coalesce(func.sum(Order.total_amount), 0).label("total_revenue")
+
+        order_agg = (
+            select(
+                Order.shop_id.label("shop_id"),
+                total_orders,
+                total_revenue,
+            )
+            .where(*order_filters)
+            .group_by(Order.shop_id)
+        ).subquery()
+
+        shop_filters = [
+            ShopOwner.is_supermarket.is_(True),
+            ShopOwner.is_deleted.is_(False),
+        ]
         if search and search.strip():
             q = f"%{search.strip()}%"
-            base.append(ShopOwner.shop_name.ilike(q))
+            shop_filters.append(ShopOwner.shop_name.ilike(q))
 
-        delivered_amount = func.coalesce(
-            func.sum(case((Order.order_status == OrderStatus.DELIVERED, Order.total_amount), else_=0)),
-            0,
-        ).label("delivered_revenue")
-        total_orders = func.count(Order.order_id).label("total_orders")
-        delivered_orders = func.sum(case((Order.order_status == OrderStatus.DELIVERED, 1), else_=0)).label(
-            "delivered_orders"
-        )
-        cancelled_orders = func.sum(case((Order.order_status == OrderStatus.CANCELLED, 1), else_=0)).label(
-            "cancelled_orders"
-        )
-        last_order_at = func.max(Order.created_at).label("last_order_at")
-
-        avg_assign_mins = func.avg(func.extract("epoch", Order.assigned_at - Order.created_at) / 60.0).label(
-            "avg_assign_mins"
-        )
-        avg_pickup_mins = func.avg(func.extract("epoch", Order.picked_up_at - Order.created_at) / 60.0).label(
-            "avg_pickup_mins"
-        )
-        avg_deliver_mins = func.avg(func.extract("epoch", Order.delivered_at - Order.created_at) / 60.0).label(
-            "avg_deliver_mins"
-        )
+        oa = order_agg.alias("oa")
+        rev_sort = func.coalesce(oa.c.total_revenue, 0)
+        orders_sort = func.coalesce(oa.c.total_orders, 0)
 
         stmt = (
             select(
-                Order.shop_id,
                 ShopOwner.shop_name,
                 ShopOwner.user_id,
-                total_orders,
-                delivered_orders,
-                cancelled_orders,
-                delivered_amount,
-                last_order_at,
-                func.coalesce(avg_assign_mins, 0),
-                func.coalesce(avg_pickup_mins, 0),
-                func.coalesce(avg_deliver_mins, 0),
+                func.coalesce(oa.c.total_orders, 0).label("total_orders"),
+                func.coalesce(oa.c.total_revenue, 0).label("total_revenue"),
             )
-            .join(ShopOwner, ShopOwner.shop_id == Order.shop_id)
-            .where(*base)
-            .group_by(Order.shop_id, ShopOwner.shop_name, ShopOwner.user_id)
+            .select_from(ShopOwner)
+            .outerjoin(oa, ShopOwner.shop_id == oa.c.shop_id)
+            .where(*shop_filters)
         )
 
         if sort == "orders_desc":
-            stmt = stmt.order_by(total_orders.desc())
-        elif sort == "sla_deliver_desc":
-            stmt = stmt.order_by(func.coalesce(avg_deliver_mins, 0).desc())
+            stmt = stmt.order_by(orders_sort.desc(), ShopOwner.shop_name.asc())
+        elif sort == "name_asc":
+            stmt = stmt.order_by(ShopOwner.shop_name.asc())
         else:
-            stmt = stmt.order_by(delivered_amount.desc())
+            stmt = stmt.order_by(rev_sort.desc(), ShopOwner.shop_name.asc())
 
-        count_stmt = select(func.count(distinct(Order.shop_id))).join(ShopOwner, ShopOwner.shop_id == Order.shop_id).where(
-            *base
-        )
+        count_stmt = select(func.count()).select_from(ShopOwner).where(*shop_filters)
         total = int(self.db.scalar(count_stmt) or 0)
 
         stmt = stmt.offset((page - 1) * limit).limit(limit)
         rows = self.db.execute(stmt).all()
         items = [
             {
-                "shop_id": str(r.shop_id),
                 "shop_name": str(r.shop_name),
                 "user_id": int(r.user_id),
                 "total_orders": int(r.total_orders or 0),
-                "delivered_orders": int(r.delivered_orders or 0),
-                "cancelled_orders": int(r.cancelled_orders or 0),
-                "delivered_revenue": float(r.delivered_revenue or 0),
-                "last_order_at": r.last_order_at.isoformat() if r.last_order_at else None,
-                "sla": {
-                    "avg_assign_mins": float(r[8] or 0),
-                    "avg_pickup_mins": float(r[9] or 0),
-                    "avg_deliver_mins": float(r[10] or 0),
-                },
+                "total_revenue": float(r.total_revenue or 0),
             }
             for r in rows
         ]
@@ -178,7 +173,7 @@ class DailyActivityRepository:
                 func.date(Order.created_at).label("date"),
                 func.count(Order.order_id).label("orders"),
                 func.coalesce(
-                    func.sum(case((Order.order_status == OrderStatus.DELIVERED, Order.total_amount), else_=0)),
+                    func.sum(case((_order_status_is(_OS_DELIVERED), Order.total_amount), else_=0)),
                     0,
                 ).label("delivered_revenue"),
             )

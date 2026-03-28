@@ -115,6 +115,7 @@ class SupermarketListFilters(BaseModel):
     user_id: int | None = None
     shop_id: str | None = None
     phone: str | None = None
+    email: str | None = None
 
 
 class SupermarketCreateAddress(BaseModel):

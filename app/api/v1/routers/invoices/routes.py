@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from app.api.deps import get_shop_owner_service
 from app.api.deps.auth import CurrentUser, require_roles
 from app.api.deps.services import get_invoice_service
 from app.api.exceptions.error_codes import ErrorCode
@@ -19,6 +20,7 @@ from app.api.v1.schemas.subscription_invoice import (
 from app.domain.enums.roles import Role
 from app.infrastructure.db.models.enums import InvoiceDocumentType, InvoiceStatus
 from app.services.invoice_service import InvoiceService
+from app.services.shop_owner_service import ShopOwnerService
 
 
 router = APIRouter(prefix="/api/v1/admin/invoices", tags=["invoices"])
@@ -290,6 +292,22 @@ async def download_invoice_admin(
 portal_router = APIRouter(prefix="/api/v1/portal/invoices", tags=["portal-invoices"])
 
 
+def _empty_accounts_overview(days: int) -> dict[str, Any]:
+    return {
+        "window_days": days,
+        "kpis": {
+            "collected_amount": 0.0,
+            "to_collect_amount": 0.0,
+            "overdue_shops": 0,
+            "pending_shops": 0,
+            "overdue_invoices": 0,
+            "pending_invoices": 0,
+        },
+        "series": {"daily_collected": []},
+        "lists": {"top_overdue_shops": []},
+    }
+
+
 @portal_router.get("", response_model=dict[str, Any])
 async def list_invoices_portal(
     page: int = Query(default=1, ge=1),
@@ -305,9 +323,13 @@ async def list_invoices_portal(
     sort: str | None = Query(default="-billing_period_start"),
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
+    if not shop_id:
+        return {"data": [], "meta": {"page": page, "limit": limit, "total": 0}}
     filters: dict[str, Any] = {
-        "shop_id": current_user.user_id,
+        "shop_id": shop_id,
         "status": status,
         "document_type": document_type,
         "subscription_id": subscription_id,
@@ -338,14 +360,30 @@ async def list_invoices_portal(
     return {"data": [i.model_dump() for i in items], "meta": {"page": page, "limit": limit, "total": total}}
 
 
+@portal_router.get("/overview", response_model=dict[str, Any])
+async def accounts_overview_portal(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
+    service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
+) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
+    if not shop_id:
+        return {"data": _empty_accounts_overview(days), "meta": None}
+    data = service.get_accounts_overview(days=days, shop_id=shop_id)
+    return {"data": data, "meta": None}
+
+
 @portal_router.get("/{invoice_id}", response_model=dict[str, Any])
 async def get_invoice_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     return {"data": invoice.model_dump(), "meta": None}
 
@@ -355,9 +393,11 @@ async def download_invoice_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     return {
         "data": {
@@ -369,23 +409,15 @@ async def download_invoice_portal(
     }
 
 
-@portal_router.get("/overview", response_model=dict[str, Any])
-async def accounts_overview_portal(
-    days: int = Query(default=30, ge=1, le=365),
-    current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
-    service: InvoiceService = Depends(get_invoice_service),
-) -> dict[str, Any]:
-    data = service.get_accounts_overview(days=days, shop_id=current_user.user_id)
-    return {"data": data, "meta": None}
-
-
 @portal_router.post("/create-manual", response_model=dict[str, Any])
 async def create_manual_invoice_portal(
     payload: SubscriptionInvoiceCreate,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
-    if payload.shop_id != current_user.user_id:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
+    if not shop_id or payload.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     invoice = service.create_manual_invoice(payload)
     return {"data": invoice.model_dump(), "meta": None}
@@ -397,9 +429,11 @@ async def update_invoice_portal(
     payload: SubscriptionInvoiceUpdate,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     updated = service.update_invoice(invoice_id, payload)
     return {"data": updated.model_dump(), "meta": None}
@@ -413,9 +447,11 @@ async def update_invoice_status_portal(
     transaction_reference: str | None = None,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     updated = service.update_status(
         invoice_id,
@@ -431,9 +467,11 @@ async def retry_bill_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     bill = service.retry_bill_generation(invoice_id)
     return {"data": bill.model_dump(), "meta": None}
@@ -444,9 +482,11 @@ async def send_invoice_email_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     return {"data": {"code": "EMAIL_NOT_CONFIGURED"}, "meta": None}
 
@@ -456,9 +496,11 @@ async def send_followup_email_portal(
     invoice_id: int,
     current_user: CurrentUser = Depends(require_roles(Role.PORTAL_USER)),
     service: InvoiceService = Depends(get_invoice_service),
+    shop_owner_service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict[str, Any]:
+    shop_id = shop_owner_service.get_shop_id_for_portal_email(current_user.user_id)
     invoice = service.get_invoice(invoice_id)
-    if invoice.shop_id != current_user.user_id:
+    if not shop_id or invoice.shop_id != shop_id:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, message="Not enough permissions", status_code=403)
     return {"data": {"code": "EMAIL_NOT_CONFIGURED"}, "meta": None}
 

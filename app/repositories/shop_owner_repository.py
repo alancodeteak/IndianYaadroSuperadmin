@@ -45,6 +45,8 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             conditions.append(ShopOwner.shop_id == filters.shop_id.strip())
         if filters.phone:
             conditions.append(ShopOwner.phone == filters.phone.strip())
+        if filters.email:
+            conditions.append(func.lower(ShopOwner.email) == filters.email.strip().lower())
 
         count_stmt = select(func.count(ShopOwner.id)).where(*conditions)
         total = int(self.db.scalar(count_stmt) or 0)
@@ -95,6 +97,17 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             for row in rows
         ]
         return items, total
+
+    def get_shop_id_by_email(self, email: str) -> str | None:
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return None
+        stmt = select(ShopOwner.shop_id).where(
+            func.lower(ShopOwner.email) == normalized,
+            ShopOwner.is_supermarket.is_(True),
+            ShopOwner.is_deleted.is_(False),
+        )
+        return self.db.scalar(stmt)
 
     def get_supermarket_detail_by_user_id(self, user_id: int) -> dict[str, Any] | None:
         # IMPORTANT:
