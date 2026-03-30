@@ -38,13 +38,16 @@ class ShopOwnerService:
         shop_id: str | None = None,
         phone: str | None = None,
         email: str | None = None,
+        sort: str = "created_desc",
     ) -> dict[str, Any]:
         validate_page_and_limit(page, limit, max_limit=100)
 
         filters = SupermarketListFilters(
             name=name, user_id=user_id, shop_id=shop_id, phone=phone, email=email
         )
-        rows, total = self.repository.list_supermarkets(page=page, limit=limit, filters=filters)
+        rows, total = self.repository.list_supermarkets(
+            page=page, limit=limit, filters=filters, sort=sort
+        )
         total_pages = ceil(total / limit) if total > 0 else 1
         return {
             "data": rows,

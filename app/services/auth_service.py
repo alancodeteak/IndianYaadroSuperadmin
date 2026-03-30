@@ -163,6 +163,15 @@ class AuthService:
         )
 
     def _ensure_email_allowed(self, purpose: str, email: str) -> None:
+        if purpose == "portal":
+            default_email = (self.settings.PORTAL_DEFAULT_EMAIL or "").strip().lower()
+            if default_email and email.lower() != default_email:
+                raise ApiError(
+                    code=ErrorCode.UNAUTHORIZED,
+                    message="Email is not allowed for this login flow",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
         allowlist = self.settings.ADMIN_OTP_EMAILS if purpose == "admin" else self.settings.PORTAL_OTP_EMAILS
         allowed = {item.strip().lower() for item in allowlist.split(",") if item.strip()}
         if not allowed or email.lower() not in allowed:

@@ -58,7 +58,12 @@ def get_invoice_service(
     db: Session = Depends(get_db_session),
     shop_repo: ShopOwnerRepository = Depends(get_shop_owner_repository),
 ) -> InvoiceService:
-    return InvoiceService(repository=repo, session=db, shop_owner_repository=shop_repo)
+    return InvoiceService(
+        repository=repo,
+        session=db,
+        shop_owner_repository=shop_repo,
+        settings=get_settings(),
+    )
 
 
 def get_daily_activity_service(

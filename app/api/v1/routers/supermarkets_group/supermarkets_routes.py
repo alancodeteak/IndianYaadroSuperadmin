@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
+from app.api.core.config import get_settings
 from app.api.deps import CurrentUser, get_shop_owner_service, require_authenticated
 from app.api.exceptions.error_codes import ErrorCode
 from app.api.exceptions.http_errors import ApiError
@@ -34,6 +35,7 @@ def list_supermarkets(
     user_id: int | None = Query(default=None),
     shop_id: str | None = Query(default=None),
     phone: str | None = Query(default=None),
+    sort: str = Query(default="created_desc"),
     current_user: CurrentUser = Depends(require_authenticated),
     service: ShopOwnerService = Depends(get_shop_owner_service),
 ) -> dict:
@@ -45,6 +47,10 @@ def list_supermarkets(
         )
     # Portal JWT subject is the login email; scope the directory to that shop only.
     if current_user.role == Role.PORTAL_USER:
+        settings = get_settings()
+        allowlist = str(settings.PORTAL_OTP_EMAILS or "")
+        allowed = {item.strip().lower() for item in allowlist.split(",") if item.strip()}
+        is_support = str(current_user.user_id or "").strip().lower() in allowed
         payload = service.list_supermarkets(
             page=page,
             limit=limit,
@@ -52,7 +58,9 @@ def list_supermarkets(
             user_id=None,
             shop_id=None,
             phone=None,
-            email=current_user.user_id,
+            # Support portal users can see all shops; others remain email-scoped.
+            email=None if is_support else current_user.user_id,
+            sort=sort,
         )
     else:
         payload = service.list_supermarkets(
@@ -63,6 +71,7 @@ def list_supermarkets(
             shop_id=shop_id,
             phone=phone,
             email=None,
+            sort=sort,
         )
     return {"data": payload["data"], "meta": payload["meta"]}
 

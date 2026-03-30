@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -9,6 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.api.core.config import Settings
 from app.api.exceptions.error_codes import ErrorCode
 from app.domain.exceptions import (
     BusinessRuleViolationError,
@@ -72,16 +74,45 @@ class InvoiceService:
         repository: AbstractInvoiceRepository,
         session: Session,
         shop_owner_repository: AbstractShopOwnerRepository,
+        settings: Settings,
     ):
         self.repository = repository
         self._session = session
         self._shop_owner_repository = shop_owner_repository
+        self.settings = settings
         self.number_generator = InvoiceNumberGenerator()
 
+    def _is_portal_support_user(self, portal_email: str) -> bool:
+        allowlist = str(self.settings.PORTAL_OTP_EMAILS or "")
+        allowed = {item.strip().lower() for item in allowlist.split(",") if item.strip()}
+        return portal_email.strip().lower() in allowed
+
     def resolve_portal_shop_id(self, portal_email: str) -> str | None:
-        return self._shop_owner_repository.get_shop_id_by_email(portal_email)
+        shop_id = self._shop_owner_repository.get_shop_id_by_email(portal_email)
+        try:
+            payload = {
+                "sessionId": "46071a",
+                "runId": "pre-fix",
+                "hypothesisId": "H1",
+                "location": "invoice_service.py:resolve_portal_shop_id",
+                "message": "Resolved portal shop id",
+                "data": {
+                    "portalEmailHash": hashlib.sha256(str(portal_email or "").strip().lower().encode()).hexdigest()[:12],
+                    "portalEmailLooksLikeEmail": "@" in str(portal_email or ""),
+                    "shopIdFound": bool(shop_id),
+                },
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            }
+            with open("/Users/alan/CodeTeak/Yaadro/superadmin/.cursor/debug-46071a.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
+        return shop_id
 
     def ensure_portal_invoice_access(self, portal_email: str, invoice_shop_id: str) -> None:
+        # Support portal users (allowlisted) can view invoices across shops.
+        if self._is_portal_support_user(portal_email):
+            return
         shop_id = self.resolve_portal_shop_id(portal_email)
         if not shop_id or shop_id != invoice_shop_id:
             log.info(
@@ -106,7 +137,13 @@ class InvoiceService:
     ) -> tuple[list[SubscriptionInvoiceListItem], int]:
         shop_id = self.resolve_portal_shop_id(portal_email)
         if not shop_id:
-            return [], 0
+            # If the portal email is allowlisted, treat it as a support user (see all shops).
+            if self._is_portal_support_user(portal_email):
+                return self.list_invoices(page=page, limit=limit, filters=filters, order_by=order_by)
+            # Otherwise: explicit error so it isn't silent "no data".
+            raise PermissionDeniedError(
+                "Portal user is not linked to any shop. Set the shop owner's email/contact email to the portal login email."
+            )
         merged = {**filters, "shop_id": shop_id}
         return self.list_invoices(page=page, limit=limit, filters=merged, order_by=order_by)
 
@@ -593,7 +630,11 @@ class InvoiceService:
     def get_accounts_overview_for_portal(self, portal_email: str, *, days: int) -> dict[str, Any]:
         shop_id = self.resolve_portal_shop_id(portal_email)
         if not shop_id:
-            return _empty_accounts_overview(days)
+            if self._is_portal_support_user(portal_email):
+                return self.get_accounts_overview(days=days, shop_id=None)
+            raise PermissionDeniedError(
+                "Portal user is not linked to any shop. Set the shop owner's email/contact email to the portal login email."
+            )
         return self.get_accounts_overview(days=days, shop_id=shop_id)
 
     def _ensure_valid_transition(self, current: InvoiceStatus, new: InvoiceStatus) -> None:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
+import hashlib
 from typing import Any
 
-from sqlalchemy import String, case, cast, func, select, update
+from sqlalchemy import String, case, cast, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,7 +33,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         self.db = db
 
     def list_supermarkets(
-        self, page: int, limit: int, filters: SupermarketListFilters
+        self, page: int, limit: int, filters: SupermarketListFilters, sort: str = "created_desc"
     ) -> tuple[list[dict[str, Any]], int]:
         conditions = [
             ShopOwner.is_supermarket.is_(True),
@@ -46,7 +48,13 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         if filters.phone:
             conditions.append(ShopOwner.phone == filters.phone.strip())
         if filters.email:
-            conditions.append(func.lower(ShopOwner.email) == filters.email.strip().lower())
+            normalized_email = filters.email.strip().lower()
+            conditions.append(
+                or_(
+                    func.lower(ShopOwner.email) == normalized_email,
+                    func.lower(ShopOwner.contact_person_email) == normalized_email,
+                )
+            )
 
         count_stmt = select(func.count(ShopOwner.id)).where(*conditions)
         total = int(self.db.scalar(count_stmt) or 0)
@@ -57,6 +65,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 ShopOwner.shop_name,
                 ShopOwner.user_id,
                 ShopOwner.phone,
+                ShopOwner.last_login_at,
                 Address.street_address,
                 Address.latitude,
                 Address.longitude,
@@ -64,10 +73,17 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
             )
             .join(Address, Address.id == ShopOwner.address_id)
             .where(*conditions)
-            .order_by(ShopOwner.created_at.desc(), ShopOwner.id.desc())
             .offset((page - 1) * limit)
             .limit(limit)
         )
+        if sort == "last_login_desc":
+            stmt = stmt.order_by(
+                ShopOwner.last_login_at.desc().nullslast(),
+                ShopOwner.created_at.desc(),
+                ShopOwner.id.desc(),
+            )
+        else:
+            stmt = stmt.order_by(ShopOwner.created_at.desc(), ShopOwner.id.desc())
         rows = self.db.execute(stmt).all()
 
         def _safe_photo_url(photo: Any) -> str | None:
@@ -89,6 +105,7 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
                 "shop_name": row.shop_name,
                 "user_id": row.user_id,
                 "phone": row.phone,
+                "last_login_at": row.last_login_at,
                 "location": row.street_address,
                 "geo_coordinates": row.geo_coordinates,
                 "latitude": row.latitude,
@@ -103,11 +120,33 @@ class ShopOwnerRepository(AbstractShopOwnerRepository):
         if not normalized:
             return None
         stmt = select(ShopOwner.shop_id).where(
-            func.lower(ShopOwner.email) == normalized,
+            or_(
+                func.lower(ShopOwner.email) == normalized,
+                func.lower(ShopOwner.contact_person_email) == normalized,
+            ),
             ShopOwner.is_supermarket.is_(True),
             ShopOwner.is_deleted.is_(False),
         )
-        return self.db.scalar(stmt)
+        shop_id = self.db.scalar(stmt)
+        try:
+            payload = {
+                "sessionId": "46071a",
+                "runId": "pre-fix",
+                "hypothesisId": "H2",
+                "location": "shop_owner_repository.py:get_shop_id_by_email",
+                "message": "Portal email lookup",
+                "data": {
+                    "emailHash": hashlib.sha256(normalized.encode()).hexdigest()[:12],
+                    "looksLikeEmail": "@" in normalized,
+                    "matched": bool(shop_id),
+                },
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            }
+            with open("/Users/alan/CodeTeak/Yaadro/superadmin/.cursor/debug-46071a.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
+        return shop_id
 
     def get_supermarket_detail_by_user_id(self, user_id: int) -> dict[str, Any] | None:
         # IMPORTANT:

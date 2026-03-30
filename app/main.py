@@ -20,7 +20,8 @@ from app.api.middlewares.security_headers import SecurityHeadersMiddleware
 from app.api.router import get_api_router
 from app.api.core.config import get_settings
 from app.api.core.logger import configure_logging
-from app.infrastructure.db.session import engine
+from app.infrastructure.db.session import SessionLocal, engine
+from app.repositories.shop_owner_repository import ShopOwnerRepository
 
 
 @asynccontextmanager
@@ -40,6 +41,34 @@ async def lifespan(app: FastAPI):
             extra={"error_type": type(exc).__name__, "fail_fast": settings.FAIL_FAST_ON_DB_ERROR},
         )
         if settings.FAIL_FAST_ON_DB_ERROR:
+            raise
+
+    # Validate portal email mapping (single-user convenience).
+    portal_email = (settings.PORTAL_DEFAULT_EMAIL or "").strip().lower()
+    if portal_email:
+        try:
+            db = SessionLocal()
+            try:
+                repo = ShopOwnerRepository(db)
+                shop_id = repo.get_shop_id_by_email(portal_email)
+            finally:
+                db.close()
+
+            if not shop_id:
+                raise RuntimeError(
+                    "PORTAL_DEFAULT_EMAIL is set but does not match any shop owner. "
+                    "Set shop_owners.email or shop_owners.contact_person_email to this value."
+                )
+
+            logger.info(
+                "startup readiness: portal email mapping OK",
+                extra={"portal_default_email_configured": True},
+            )
+        except Exception as exc:
+            logger.error(
+                "startup readiness: portal email mapping check failed",
+                extra={"error_type": type(exc).__name__},
+            )
             raise
     yield
 

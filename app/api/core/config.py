@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     OTP_LOG_TO_TERMINAL: bool = False
     ADMIN_OTP_EMAILS: str = ""
     PORTAL_OTP_EMAILS: str = ""
+    # Single-portal-user convenience: when set, only this email may use portal OTP flow.
+    # Still requires DB mapping to a shop (validated at startup).
+    PORTAL_DEFAULT_EMAIL: str = ""
     SMTP_ENABLED: bool = False
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
