@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -255,7 +256,8 @@ class InvoiceService:
         if description:
             object.__setattr__(payload, "description", description)
         if notes:
-            object.__setattr__(payload, "notes", notes)
+            # Store notes as a JSON log, even for system-created invoices.
+            object.__setattr__(payload, "notes", self._append_note_log(None, notes))
         self._validate_amounts(payload)
         with session_commit_scope(self._session):
             created = self.repository.create_invoice(payload)
@@ -277,10 +279,105 @@ class InvoiceService:
                     "Paid invoices have restricted editable fields",
                     code=ErrorCode.VALIDATION_ERROR,
                 )
+        # Normalize notes into a JSON log string (append or mark deleted).
+        if "notes" in data:
+            new_note = data.get("notes")
+            if new_note is not None:
+                note_str = str(new_note).strip()
+                if note_str.startswith("__DELETE_NOTE_ID__:"):
+                    note_id = note_str.split(":", 2)[-1].strip() or None
+                    data["notes"] = self._mark_note_deleted(invoice.notes, note_id)
+                    payload.notes = data["notes"]
+                else:
+                    data["notes"] = self._append_note_log(invoice.notes, note_str)
+                    payload.notes = data["notes"]
+            else:
+                # Explicitly clearing notes keeps behaviour: allow null to blank out the log.
+                payload.notes = None
         self._validate_amounts(payload)
         with session_commit_scope(self._session):
             updated = self.repository.update_invoice(invoice, payload)
         return SubscriptionInvoiceRead.model_validate(updated)
+
+    def _append_note_log(self, existing: str | None, new_text: str) -> str:
+        """
+        Append a note entry to the existing JSON log stored in SubscriptionInvoice.notes.
+
+        Format stored in DB (string, but valid JSON object):
+        {
+          "1": "Test 1 [2026-03-12 10:00:00 UTC]",
+          "2": "Test 2 [2026-03-12 11:30:15 UTC]"
+        }
+        """
+        text = (new_text or "").strip()
+        if not text:
+            # If nothing meaningful was provided, keep existing as-is.
+            return existing or ""
+
+        data: dict[str, str]
+        if existing:
+            try:
+                parsed = json.loads(existing)
+                if isinstance(parsed, dict):
+                    # Ensure all keys are strings so json.dumps is stable.
+                    data = {str(k): str(v) for k, v in parsed.items()}
+                else:
+                    data = {}
+            except Exception:
+                # If legacy/plain text is present, keep it under key "1" and start fresh.
+                data = {}
+                if existing.strip():
+                    data["1"] = str(existing).strip()
+        else:
+            data = {}
+
+        # Find the next numeric key.
+        max_idx = 0
+        for k in data.keys():
+            try:
+                n = int(str(k))
+                if n > max_idx:
+                    max_idx = n
+            except ValueError:
+                continue
+        next_idx = max_idx + 1
+
+        now = datetime.now(timezone.utc)
+        timestamp = now.strftime("%Y-%m-%d %H:%M:%S %Z")
+        data[str(next_idx)] = f"{text} [{timestamp}]"
+
+        return json.dumps(data, ensure_ascii=False)
+
+    def _mark_note_deleted(self, existing: str | None, note_id: str | None) -> str:
+        """
+        Mark a specific note entry as deleted, keeping its key but replacing the value.
+
+        Result example (for id \"3\"):
+        {
+          "3": "deleted [2026-03-12 10:00:00 UTC]"
+        }
+        """
+        if not existing:
+            return existing or ""
+        try:
+            parsed = json.loads(existing)
+            if not isinstance(parsed, dict):
+                return existing
+        except Exception:
+            return existing
+
+        if not note_id:
+            return existing
+
+        key = str(note_id)
+        if key not in parsed:
+            return existing
+
+        now = datetime.now(timezone.utc)
+        timestamp = now.strftime("%Y-%m-%d %H:%M:%S %Z")
+        parsed[key] = f"deleted [{timestamp}]"
+
+        return json.dumps({str(k): v for k, v in parsed.items()}, ensure_ascii=False)
 
     def _require_invoice(self, invoice_id: int) -> SubscriptionInvoice:
         validate_positive_id(invoice_id, field_name="invoice_id")
